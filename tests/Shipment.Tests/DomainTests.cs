@@ -205,9 +205,9 @@ public sealed class DomainTests
     }
 
     [Fact]
-    public void The_30th_day_is_no_longer_expiring_as_the_former_view_counted_it()
+    public void The_30th_day_is_no_longer_expiring()
     {
-        // compliance_app.courier_documents: valid_until < today + 30 -> expiring.
+        // A document is expiring while valid_until < today + 30.
         Assert.Equal(DocumentState.Valid, CourierDocument.StateOf(Today.AddDays(30), true, Today));
         Assert.False(Clearance.Of(false, [Doc(DocumentKind.IdCard, 30)], Today).ExpiringSoon);
     }

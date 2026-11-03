@@ -1,6 +1,6 @@
 # 0010. Query composition on the page
 
-Status: accepted (2026-10-29); since 0013 each card calls its context's application service instead of its `_app` view
+Status: accepted (2026-10-29)
 
 ## Context
 
@@ -9,6 +9,6 @@ needs data owned by several contexts.
 
 ## Decision
 
-No view that joins every context. The page calls each module's own view by the shipment id (`dispatch_app`,
-`tracking_app`, `carriers_app`, `crm_app`, `compliance_app`, `billing_app`) and composes the cards. Each card belongs
-to its context and can fail alone.
+No query that joins every context. The page calls each context's application service by the shipment id (dispatch,
+tracking, carriers, crm, compliance, billing) and composes the cards. Each card belongs to its context and can fail
+alone.
