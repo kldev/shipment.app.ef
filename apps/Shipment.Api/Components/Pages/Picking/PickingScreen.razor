@@ -1,0 +1,217 @@
+@page "/picking/{Id:guid}"
+@inject OrderingService Ordering
+@inject PickingService Picking
+
+@* Packing one order on a tablet: big touch targets, line by line. Every line gets a packed quantity (0..ordered); the
+   rest is missing and is not charged. A missing product may be taken off the catalog at once (PickingService). *@
+
+<PageTitle>@($"Pick {_order?.Code}") · Shipment</PageTitle>
+
+<a href="picking" class="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+    <Icon Name="arrow-left" /> Back to the queue
+</a>
+
+<ErrorAlert Message="@_error" />
+
+@if (_order is null)
+{
+    @if (_error is null)
+    {
+        <div class="h-40 animate-pulse rounded-xl bg-muted"></div>
+    }
+}
+else
+{
+    <header class="mb-5 flex flex-wrap items-start justify-between gap-4">
+        <div>
+            <p class="eyebrow">@_order.PartnerName - @_order.PickupPointName</p>
+            <h1 class="page-title flex items-center gap-3"><span class="font-mono">@_order.Code</span> <OrderStatusBadge Status="@_order.Status" /></h1>
+            <p class="text-sm text-muted-foreground">
+                For @_order.CustomerName · placed @Labels.Ago(_order.PlacedAt)
+                @if (_order.AgeRestricted)
+                {
+                    <span class="ml-2 badge badge-outline">18+ - the courier checks the ID</span>
+                }
+            </p>
+        </div>
+    </header>
+
+    @switch (_order.Status)
+    {
+        case OrderStatus.Placed:
+            <div class="card flex flex-col items-center gap-4 p-8 text-center">
+                <p class="text-lg">@_lines.Count lines, @_lines.Sum(l => l.Quantity) items to pack.</p>
+                <button type="button" class="btn btn-primary h-14 px-8 text-lg" disabled="@_saving" @onclick="StartAsync">
+                    <Icon Name="package-search" Class="size-5" /> Start picking
+                </button>
+            </div>
+            break;
+        case OrderStatus.Picking:
+            <ul class="space-y-3">
+                @foreach (var line in _lines)
+                {
+                    var no = line.LineNo;
+                    var picked = Picked(no);
+                    var missing = picked is { } p ? line.Quantity - p : 0;
+                    <li class="@($"card flex flex-wrap items-center gap-4 p-4 {(picked is null ? "" : missing > 0 ? "border-warning" : "border-success/60")}")">
+                        <div class="min-w-0 flex-1">
+                            <p class="text-lg font-semibold">
+                                @line.Name
+                                @if (line.AgeRestricted)
+                                {
+                                    <span class="badge badge-outline ml-1">18+</span>
+                                }
+                            </p>
+                            <p class="font-mono text-sm text-muted-foreground">@line.Sku · @Labels.Weight(line.WeightG)</p>
+                            @if (missing > 0)
+                            {
+                                <label class="mt-2 inline-flex items-center gap-2 text-sm">
+                                    <input type="checkbox" class="size-5" checked="@_takeOff.Contains(no)" @onchange="e => TakeOff(no, (bool)e.Value!)" />
+                                    @missing missing - take it off the catalog
+                                </label>
+                            }
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button type="button" class="btn btn-outline size-14 text-xl" aria-label="One less @line.Name"
+                                    disabled="@((picked ?? line.Quantity) == 0)" @onclick="() => Set(no, (picked ?? line.Quantity) - 1)">
+                                <Icon Name="minus" Class="size-6" />
+                            </button>
+                            <span class="w-20 text-center text-2xl font-semibold tabular-nums">
+                                @(picked?.ToString() ?? "–")<span class="text-base text-muted-foreground">/@line.Quantity</span>
+                            </span>
+                            <button type="button" class="btn btn-outline size-14 text-xl" aria-label="One more @line.Name"
+                                    disabled="@((picked ?? 0) >= line.Quantity)" @onclick="() => Set(no, (picked ?? 0) + 1)">
+                                <Icon Name="plus" Class="size-6" />
+                            </button>
+                            <button type="button" class="@($"btn h-14 px-5 text-base {(picked == line.Quantity ? "btn-primary" : "btn-outline")}")"
+                                    @onclick="() => Set(no, line.Quantity)">
+                                <Icon Name="check" Class="size-5" /> All
+                            </button>
+                            <button type="button" class="@($"btn h-14 px-5 text-base {(picked == 0 ? "btn-destructive" : "btn-outline")}")"
+                                    @onclick="() => Set(no, 0)">
+                                <Icon Name="x" Class="size-5" /> Missing
+                            </button>
+                        </div>
+                    </li>
+                }
+            </ul>
+
+            <div class="card sticky bottom-4 mt-5 flex flex-wrap items-center justify-between gap-4 p-4 shadow-lg">
+                <div class="text-sm">
+                    @if (Undecided > 0)
+                    {
+                        <p class="font-medium">@Undecided @(Undecided == 1 ? "line" : "lines") to decide</p>
+                    }
+                    else if (Missing.Any())
+                    {
+                        <p class="font-medium text-warning">Missing: @string.Join(", ", Missing.Select(m => $"{m.Quantity} × {m.Name}"))</p>
+                        <p class="text-muted-foreground">Not charged - the customer is refunded and told.</p>
+                    }
+                    else
+                    {
+                        <p class="font-medium text-success">Everything packed.</p>
+                    }
+                    @if (Undecided == 0 && _picked.Values.All(v => v == 0))
+                    {
+                        <p class="text-destructive">Nothing packed - the order will be cancelled.</p>
+                    }
+                </div>
+                <button type="button" class="btn btn-primary h-14 px-8 text-lg" disabled="@(Undecided > 0 || _saving)" @onclick="FinishAsync">
+                    <Icon Name="package-check" Class="size-5" /> Finish picking
+                </button>
+            </div>
+            break;
+        default:
+            <div class="card flex flex-col items-center gap-3 p-8 text-center">
+                <Icon Name="@(_order.Status == OrderStatus.Cancelled ? "ban" : "circle-check")" Class="@($"size-10 {(_order.Status == OrderStatus.Cancelled ? "text-destructive" : "text-success")}")" />
+                <p class="text-lg font-semibold">
+                    @(_order.Status == OrderStatus.Cancelled ? "Cancelled - nothing to hand over." : "Packed - ready for the courier.")
+                </p>
+                @if (_order.MissingLines > 0)
+                {
+                    <p class="text-sm text-muted-foreground">@_order.MissingLines @(_order.MissingLines == 1 ? "line" : "lines") missing, not charged.</p>
+                }
+                <div class="flex gap-2">
+                    <a href="picking" class="btn btn-primary h-12 px-6">Next order</a>
+                    <a href="@($"orders/{Id}")" class="btn btn-outline h-12 px-6">Open the order</a>
+                </div>
+            </div>
+            break;
+    }
+}
+
+@code {
+    private OrderRow? _order;
+    private IReadOnlyList<OrderLineRow> _lines = [];
+    private readonly Dictionary<int, int> _picked = [];
+    private readonly HashSet<int> _takeOff = [];
+    private string? _error;
+    private bool _saving;
+
+    [Parameter]
+    public Guid Id { get; set; }
+
+    /// <summary>The packed quantity of a line, null while undecided.</summary>
+    private int? Picked(int lineNo) => _picked.TryGetValue(lineNo, out var quantity) ? quantity : null;
+
+    private int Undecided => _lines.Count(l => !_picked.ContainsKey(l.LineNo));
+
+    private IEnumerable<(string Name, int Quantity)> Missing =>
+        _lines
+            .Select(l => (l.Name, l.Quantity - _picked.GetValueOrDefault(l.LineNo, l.Quantity)))
+            .Where(m => m.Item2 > 0);
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _order = await Ordering.GetOrderAsync(Id);
+        if (_order is null)
+        {
+            _error = "Order not found.";
+            return;
+        }
+        _lines = await Ordering.ListLinesAsync(Id);
+    }
+
+    private void Set(int lineNo, int quantity)
+    {
+        _picked[lineNo] = Math.Max(0, quantity);
+        if (_lines.First(l => l.LineNo == lineNo).Quantity == _picked[lineNo])
+            _takeOff.Remove(lineNo);
+    }
+
+    private void TakeOff(int lineNo, bool takeOff)
+    {
+        if (takeOff)
+            _takeOff.Add(lineNo);
+        else
+            _takeOff.Remove(lineNo);
+    }
+
+    private async Task StartAsync()
+    {
+        _saving = true;
+        _error = null;
+        var result = await Picking.StartAsync(new StartPicking(Id, _order!.RowVersion));
+        _saving = false;
+        _error = result.Error?.Message;
+        await LoadAsync();
+    }
+
+    private async Task FinishAsync()
+    {
+        _saving = true;
+        _error = null;
+        var result = await Picking.FinishAsync(
+            new FinishPicking(
+                Id,
+                _lines.Select(l => new LinePick(l.LineNo, _picked[l.LineNo], _takeOff.Contains(l.LineNo))).ToList(),
+                _order!.RowVersion
+            )
+        );
+        _saving = false;
+        _error = result.Error?.Message;
+        await LoadAsync();
+    }
+}

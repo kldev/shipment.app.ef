@@ -1,0 +1,204 @@
+@page "/picking/history"
+@inject PickingService Picking
+@inject CrmService Crm
+@inject NavigationManager Navigation
+
+@* Finished pickings for review: what each store packed, what was missing, who packed it and how long it took. The
+   filters live in the address, so a link shows the same list. The newest 200 of the period are loaded at once; the
+   table pages through them and the summary counts them. *@
+
+<PageTitle>Picking history · Shipment</PageTitle>
+
+<a href="picking" class="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+    <Icon Name="arrow-left" /> Back to the queue
+</a>
+
+<PageHeader Eyebrow="Operations" Title="Picking history"
+            Description="Orders the stores have finished packing, newest first: what was missing, who packed it and how long it took." />
+
+<ErrorAlert Message="@_error" />
+
+<div class="mb-4 flex flex-wrap items-center gap-2">
+    @foreach (var (value, name) in Periods)
+    {
+        <a href="@Link(period: value)" class="@($"btn btn-sm {(Period == value ? "btn-secondary" : "btn-ghost")}")">@name</a>
+    }
+    <span class="mx-1 h-5 w-px bg-border"></span>
+    <a href="@Link(missing: !Missing)" class="@($"btn btn-sm {(Missing ? "btn-secondary" : "btn-ghost")}")">
+        <Icon Name="triangle-alert" /> With missing items only
+    </a>
+    <select class="input h-8 w-auto text-sm" aria-label="Pickup point" value="@(Point?.ToString() ?? "")"
+            @onchange="e => Navigation.NavigateTo(Link(point: Guid.TryParse(e.Value?.ToString(), out var id) ? id : Guid.Empty))">
+        <option value="">All pickup points</option>
+        @foreach (var point in _points)
+        {
+            <option value="@point.Id">@point.PartnerName - @point.Name</option>
+        }
+    </select>
+</div>
+
+@if (_loaded && _rows.Count > 0)
+{
+    <div class="mb-4 grid gap-3 sm:grid-cols-3">
+        <div class="card p-4">
+            <p class="text-xs text-muted-foreground">Orders packed</p>
+            <p class="text-2xl font-semibold tabular-nums">@_rows.Count@(_hasMore ? "+" : "")</p>
+        </div>
+        <div class="card p-4">
+            <p class="text-xs text-muted-foreground">With missing items</p>
+            <p class="text-2xl font-semibold tabular-nums">@MissingShare</p>
+        </div>
+        <div class="card p-4">
+            <p class="text-xs text-muted-foreground">Median time to pack</p>
+            <p class="text-2xl font-semibold tabular-nums">@MedianMinutes min</p>
+        </div>
+    </div>
+    @if (_hasMore)
+    {
+        <p class="mb-3 text-xs text-muted-foreground">The summary counts the newest @_rows.Count; narrow the period or the pickup point to see all.</p>
+    }
+}
+
+@if (_loaded && _rows.Count == 0)
+{
+    <EmptyState IconName="history" Title="No finished pickings in this period"
+                Description="An order shows up here once the store finishes packing it in Picking." />
+}
+else if (_rows.Count > 0)
+{
+    <div class="card overflow-x-auto">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Order</th><th>Store</th><th>Result</th><th>Finished</th><th class="text-right">Time</th><th>Packed by</th>
+                    <th class="text-right">Items</th><th class="text-right">Packed value</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in PageRows)
+                {
+                    <tr class="cursor-pointer hover:bg-muted/50" @onclick="@(() => Navigation.NavigateTo($"orders/{row.Id}"))">
+                        <td>
+                            <a href="@($"orders/{row.Id}")" class="font-mono font-medium hover:underline">@row.Code</a>
+                            <p class="text-xs text-muted-foreground">@row.CustomerName</p>
+                        </td>
+                        <td>
+                            <p>@row.PartnerName</p>
+                            <p class="text-xs text-muted-foreground">@row.PickupPointName</p>
+                        </td>
+                        <td><OrderStatusBadge Status="@row.Status" /></td>
+                        <td class="text-xs whitespace-nowrap text-muted-foreground" title="@Labels.DateTime(row.PickingEndedAt)">@Labels.Ago(row.PickingEndedAt)</td>
+                        <td class="text-right tabular-nums">@row.PickingMinutes min</td>
+                        <td>@(row.PickedByName ?? "-")</td>
+                        <td class="text-right tabular-nums whitespace-nowrap">
+                            @row.ItemsPicked / @row.ItemCount
+                            @if (row.ItemsMissing > 0)
+                            {
+                                <span class="badge badge-warning ml-1" title="@($"{row.MissingLineCount} of {row.LineCount} lines short")">@row.ItemsMissing missing</span>
+                            }
+                        </td>
+                        <td class="text-right font-medium tabular-nums">@Labels.Money(row.GoodsPickedMinor, row.Currency)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (Pages > 1)
+    {
+        <nav class="mt-4 flex items-center justify-between text-sm" aria-label="Pages">
+            <span class="text-muted-foreground">Page @CurrentPage of @Pages</span>
+            <span class="flex gap-2">
+                @if (CurrentPage > 1)
+                {
+                    <a href="@Link(page: CurrentPage - 1)" class="btn btn-sm btn-outline"><Icon Name="chevron-left" /> Newer</a>
+                }
+                @if (CurrentPage < Pages)
+                {
+                    <a href="@Link(page: CurrentPage + 1)" class="btn btn-sm btn-outline">Older <Icon Name="chevron-right" /></a>
+                }
+            </span>
+        </nav>
+    }
+}
+
+@code {
+    private const int Loaded = 200;
+    private const int PerPage = 50;
+
+    private static readonly IReadOnlyList<(string Value, string Name)> Periods =
+    [
+        ("today", "Today"),
+        ("7d", "Last 7 days"),
+        ("30d", "Last 30 days"),
+    ];
+
+    [SupplyParameterFromQuery(Name = "period")]
+    private string? PeriodParam { get; set; }
+
+    [SupplyParameterFromQuery(Name = "missing")]
+    private bool Missing { get; set; }
+
+    [SupplyParameterFromQuery(Name = "point")]
+    private Guid? Point { get; set; }
+
+    [SupplyParameterFromQuery(Name = "page")]
+    private int? PageParam { get; set; }
+
+    private IReadOnlyList<PickingHistoryRow> _rows = [];
+    private IReadOnlyList<PickupPointRow> _points = [];
+    private bool _hasMore;
+    private string? _error;
+    private bool _loaded;
+
+    private string Period => Periods.Any(p => p.Value == PeriodParam) ? PeriodParam! : "7d";
+
+    private int Pages => Math.Max(1, (_rows.Count + PerPage - 1) / PerPage);
+
+    private int CurrentPage => Math.Clamp(PageParam ?? 1, 1, Pages);
+
+    private IEnumerable<PickingHistoryRow> PageRows => _rows.Skip((CurrentPage - 1) * PerPage).Take(PerPage);
+
+    private string MissingShare => $"{100.0 * _rows.Count(r => r.HasMissing) / _rows.Count:0}%";
+
+    private int MedianMinutes
+    {
+        get
+        {
+            var minutes = _rows.Select(r => r.PickingMinutes).Order().ToList();
+            return minutes[minutes.Count / 2];
+        }
+    }
+
+    /// <summary>This page with one filter changed; any filter change goes back to the first page.</summary>
+    private string Link(string? period = null, bool? missing = null, Guid? point = null, int? page = null)
+    {
+        var newPoint = point is { } p ? (p == Guid.Empty ? null : p) : Point;
+        return Navigation.GetUriWithQueryParameters(
+            new Dictionary<string, object?>
+            {
+                ["period"] = (period ?? Period) == "7d" ? null : period ?? Period,
+                ["missing"] = missing ?? Missing ? true : null,
+                ["point"] = newPoint,
+                ["page"] = page is > 1 ? page : null,
+            }
+        );
+    }
+
+    protected override async Task OnInitializedAsync() => _points = await Crm.ListPickupPointsAsync();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _error = null;
+        var from = Period switch
+        {
+            "today" => Labels.TodayStart(),
+            "30d" => DateTimeOffset.UtcNow.AddDays(-30),
+            _ => DateTimeOffset.UtcNow.AddDays(-7),
+        };
+        var page = await Picking.HistoryAsync(new PickingHistoryFilter(Point, from, HasMissing: Missing ? true : null), Loaded);
+        _rows = page.Items;
+        _hasMore = page.HasMore;
+        _loaded = true;
+    }
+}

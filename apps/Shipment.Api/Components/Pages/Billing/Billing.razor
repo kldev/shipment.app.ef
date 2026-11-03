@@ -1,0 +1,144 @@
+@page "/billing"
+@inject BillingService Ledger
+
+<PageTitle>Billing · Shipment</PageTitle>
+
+<PageHeader Eyebrow="Control" Title="Billing"
+            Description="The money of the orders, from an append-only ledger: payments (simulated), refunds of missing items, partners' commission and couriers' payouts.">
+    <Actions>
+        <div class="flex flex-wrap items-end gap-2">
+            <div class="space-y-1">
+                <label class="label text-xs" for="billing-from">From</label>
+                <input id="billing-from" type="date" class="input" @bind="_from" @bind:after="LoadAsync" />
+            </div>
+            <div class="space-y-1">
+                <label class="label text-xs" for="billing-to">To</label>
+                <input id="billing-to" type="date" class="input" @bind="_to" @bind:after="LoadAsync" />
+            </div>
+        </div>
+    </Actions>
+</PageHeader>
+
+<ErrorAlert Message="@_error" />
+
+<section class="mb-6 grid gap-4 sm:grid-cols-3 xl:grid-cols-6">
+    @foreach (var (label, value, icon, hint) in Cards)
+    {
+        <div class="card p-4">
+            <p class="flex items-center gap-2 text-xs text-muted-foreground"><Icon Name="@icon" /> @label</p>
+            <p class="mt-1 text-2xl font-semibold tabular-nums">@value</p>
+            <p class="text-xs text-muted-foreground">@hint</p>
+        </div>
+    }
+</section>
+
+<section class="grid gap-4 xl:grid-cols-2">
+    <div class="card overflow-x-auto">
+        <p class="card-title px-4 pt-4">Partners</p>
+        <table class="table">
+            <thead><tr><th>Partner</th><th class="text-right">Deliveries</th><th class="text-right">Goods</th><th class="text-right">Commission</th><th class="text-right">Payable</th></tr></thead>
+            <tbody>
+                @foreach (var partner in _partners)
+                {
+                    <tr>
+                        <td>
+                            <a href="@($"partners/{partner.PartnerId}")" class="font-medium hover:underline">@partner.PartnerName</a>
+                            <p class="text-xs text-muted-foreground">@Labels.Percent(partner.CommissionBps)</p>
+                        </td>
+                        <td class="text-right tabular-nums">@partner.Deliveries</td>
+                        <td class="text-right tabular-nums">@Money(partner.GoodsMinor)</td>
+                        <td class="text-right tabular-nums">@Money(partner.CommissionMinor)</td>
+                        <td class="text-right font-medium tabular-nums">@Money(partner.PayableMinor)</td>
+                    </tr>
+                }
+                @if (_partners.Count == 0)
+                {
+                    <tr><td colspan="5" class="text-center text-muted-foreground">No deliveries in these days.</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="card overflow-x-auto">
+        <p class="card-title px-4 pt-4">Couriers</p>
+        <table class="table">
+            <thead><tr><th>Courier</th><th class="text-right">Deliveries</th><th class="text-right">Distance</th><th class="text-right">Payout</th><th class="text-right">Tips</th></tr></thead>
+            <tbody>
+                @foreach (var courier in _couriers)
+                {
+                    <tr>
+                        <td>
+                            <p class="flex items-center gap-1.5 font-medium"><Icon Name="@Labels.VehicleIcon(courier.VehicleType)" /> @courier.DisplayName</p>
+                            <p class="text-xs text-muted-foreground">@Money(courier.BaseMinor) + @Money(courier.PerKmMinor) / km</p>
+                        </td>
+                        <td class="text-right tabular-nums">@courier.Deliveries</td>
+                        <td class="text-right tabular-nums">@Labels.Distance((int?)courier.DistanceM)</td>
+                        <td class="text-right font-medium tabular-nums">@Money(courier.PayoutMinor)</td>
+                        <td class="text-right tabular-nums">@Money(courier.TipMinor)</td>
+                    </tr>
+                }
+                @if (_couriers.Count == 0)
+                {
+                    <tr><td colspan="5" class="text-center text-muted-foreground">No payouts in these days.</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<div class="card mt-4 overflow-x-auto">
+    <p class="card-title px-4 pt-4">By day</p>
+    <table class="table">
+        <thead><tr><th>Day</th><th class="text-right">Orders</th><th class="text-right">Charged</th><th class="text-right">Refunded</th><th class="text-right">Commission</th><th class="text-right">Payouts</th><th class="text-right">Margin</th></tr></thead>
+        <tbody>
+            @foreach (var day in _days)
+            {
+                <tr>
+                    <td>@Labels.Date(day.Day)</td>
+                    <td class="text-right tabular-nums">@day.Orders</td>
+                    <td class="text-right tabular-nums">@Money(day.ChargedMinor)</td>
+                    <td class="text-right tabular-nums">@Money(day.RefundedMinor)</td>
+                    <td class="text-right tabular-nums">@Money(day.CommissionMinor)</td>
+                    <td class="text-right tabular-nums">@Money(day.PayoutMinor)</td>
+                    <td class="text-right font-medium tabular-nums">@Money(day.MarginMinor)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private DateTime _from = Labels.Today();
+    private DateTime _to = Labels.Today();
+    private IReadOnlyList<DailySummaryRow> _days = [];
+    private IReadOnlyList<PartnerBalanceRow> _partners = [];
+    private IReadOnlyList<CourierPayoutRow> _couriers = [];
+    private string? _error;
+
+    private static string Money(long? minor) => Labels.Money(minor, LedgerEntry.Currency);
+
+    private IEnumerable<(string Label, string Value, string Icon, string Hint)> Cards =>
+    [
+        ("Orders", _days.Sum(d => d.Orders).ToString(Labels.Culture), "shopping-cart", "payments authorized"),
+        ("Charged", Money(_days.Sum(d => d.ChargedMinor)), "credit-card", "packed goods and fees"),
+        ("Refunded", Money(_days.Sum(d => d.RefundedMinor)), "refresh-cw", "missing items, cancelled, failed"),
+        ("Commission", Money(_days.Sum(d => d.CommissionMinor)), "handshake", "from partners"),
+        ("Payouts", Money(_days.Sum(d => d.PayoutMinor)), "bike", $"to couriers, + {Money(_days.Sum(d => d.TipMinor))} tips"),
+        ("Margin", Money(_days.Sum(d => d.MarginMinor)), "wallet", "fees + commission - payouts"),
+    ];
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _error = null;
+        var (from, to) = (DateOnly.FromDateTime(_from), DateOnly.FromDateTime(_to));
+        if (to < from)
+        {
+            _error = "The period ends before it starts.";
+            return;
+        }
+        _days = await Ledger.DailySummaryAsync(from, to);
+        _partners = await Ledger.PartnerBalancesAsync(from, to);
+        _couriers = await Ledger.CourierPayoutsAsync(from, to);
+    }
+}

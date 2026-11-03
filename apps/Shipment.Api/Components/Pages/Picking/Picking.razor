@@ -1,0 +1,92 @@
+@page "/picking"
+@inject PickingService Packing
+
+<PageTitle>Picking · Shipment</PageTitle>
+
+<PageHeader Eyebrow="Operations" Title="Picking"
+            Description="What the stores have to pack, oldest first. The admin acts for the store; the screen is made for a tablet on the shop floor.">
+    <Actions>
+        <a href="picking/history" class="btn btn-outline"><Icon Name="history" /> History</a>
+        <button type="button" class="btn btn-outline" @onclick="LoadAsync"><Icon Name="refresh-cw" /> Refresh</button>
+    </Actions>
+</PageHeader>
+
+<ErrorAlert Message="@_error" />
+
+<div class="mb-4 flex flex-wrap items-center gap-2">
+    <button type="button" class="@($"btn btn-sm {(_point is null ? "btn-secondary" : "btn-ghost")}")" @onclick="() => _point = null">
+        All points <span class="text-muted-foreground tabular-nums">@_queue.Count</span>
+    </button>
+    @foreach (var point in Points)
+    {
+        <button type="button" class="@($"btn btn-sm {(_point == point.Id ? "btn-secondary" : "btn-ghost")}")" @onclick="() => _point = point.Id">
+            @point.Name <span class="text-muted-foreground tabular-nums">@point.Count</span>
+        </button>
+    }
+</div>
+
+@if (_loaded && !Visible.Any())
+{
+    <EmptyState IconName="package-check" Title="Nothing to pack" Description="New orders show up here as soon as they are placed." />
+}
+
+<div class="space-y-6">
+    @foreach (var group in Visible.GroupBy(o => (o.PickupPointId, o.PartnerName, o.PickupPointName)))
+    {
+        <section>
+            <h2 class="mb-2 flex items-center gap-2 font-semibold">
+                <Icon Name="store" Class="size-4 text-chart-1" /> @group.Key.PartnerName - @group.Key.PickupPointName
+            </h2>
+            <ul class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                @foreach (var order in group)
+                {
+                    <li>
+                        <a href="@($"picking/{order.Id}")" class="card flex items-center gap-4 p-4 transition-colors hover:border-primary/40">
+                            <span class="@($"flex size-12 shrink-0 items-center justify-center rounded-lg {(order.Status == OrderStatus.Picking ? "bg-warning/20" : "bg-accent text-accent-foreground")}")">
+                                <Icon Name="@(order.Status == OrderStatus.Picking ? "package-search" : "package")" Class="size-6" />
+                            </span>
+                            <span class="min-w-0 flex-1">
+                                <span class="flex items-center gap-2">
+                                    <span class="font-mono font-semibold">@order.Code</span>
+                                    <OrderStatusBadge Status="@order.Status" />
+                                    @if (order.AgeRestricted)
+                                    {
+                                        <span class="badge badge-outline">18+</span>
+                                    }
+                                </span>
+                                <span class="block truncate text-sm text-muted-foreground">@order.CustomerName · @order.LineCount lines, @order.ItemCount items</span>
+                            </span>
+                            <span class="@($"text-right text-sm tabular-nums {(order.WaitingMinutes >= 15 ? "font-semibold text-destructive" : "text-muted-foreground")}")">
+                                <Icon Name="timer" Class="inline size-4" /> @order.WaitingMinutes min
+                            </span>
+                        </a>
+                    </li>
+                }
+            </ul>
+        </section>
+    }
+</div>
+
+@code {
+    private IReadOnlyList<PickingQueueRow> _queue = [];
+    private Guid? _point;
+    private string? _error;
+    private bool _loaded;
+
+    private IEnumerable<PickingQueueRow> Visible => _queue.Where(o => _point is null || o.PickupPointId == _point);
+
+    private IEnumerable<(Guid Id, string Name, int Count)> Points =>
+        _queue
+            .GroupBy(o => o.PickupPointId)
+            .Select(g => (g.Key, $"{g.First().PartnerName} - {g.First().PickupPointName}", g.Count()))
+            .OrderBy(p => p.Item2);
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _error = null;
+        _queue = await Packing.QueueAsync();
+        _loaded = true;
+    }
+}

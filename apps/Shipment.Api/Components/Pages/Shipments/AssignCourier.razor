@@ -1,0 +1,99 @@
+@* Assign a shipment: the proposals of dispatch (available, cleared, a vehicle that carries it, nearest first) next to
+   a map of the pickup point and the couriers. DispatchService checks the choice again - the list may be old. *@
+@inject DispatchService Dispatch
+
+<Modal Title="@($"Assign {Shipment.Code}")" Description="@Description" Wide="true" OnClose="OnClose">
+    <ErrorAlert Message="@_error" />
+    <div class="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <div>
+            @if (_proposals is { Count: 0 })
+            {
+                <EmptyState IconName="bike" Title="Nobody can take it now"
+                            Description="No courier on shift is available, cleared and on a big enough vehicle. Start a shift on Couriers." />
+            }
+            <ul class="max-h-96 space-y-2 overflow-y-auto">
+                @foreach (var courier in _proposals ?? [])
+                {
+                    <li>
+                        <button type="button"
+                                class="@($"flex w-full items-center gap-3 rounded-lg border border-border px-3 py-2.5 text-left transition-colors hover:bg-muted/60 {(_chosen == courier.CourierId ? "bg-accent text-accent-foreground ring-2 ring-primary/50" : "")}")"
+                                @onclick="() => _chosen = courier.CourierId">
+                            <Icon Name="@Labels.VehicleIcon(courier.VehicleType)" Class="size-5 shrink-0" />
+                            <span class="min-w-0 flex-1">
+                                <span class="block font-medium">@courier.DisplayName</span>
+                                <span class="block text-xs text-muted-foreground">
+                                    @courier.VehicleName @courier.VehiclePlate · @courier.Phone
+                                </span>
+                            </span>
+                            <span class="text-right text-sm whitespace-nowrap tabular-nums">
+                                @(courier.DistanceM is null ? "position unknown" : Labels.Distance(courier.DistanceM))
+                                <span class="block text-xs text-muted-foreground">to pickup</span>
+                            </span>
+                        </button>
+                    </li>
+                }
+            </ul>
+        </div>
+        <Map Class="h-96" Label="Pickup point and the couriers who can take it" Markers="Markers" />
+    </div>
+    <div class="mt-5 flex justify-end gap-2 border-t border-border pt-4">
+        <button type="button" class="btn btn-ghost" @onclick="OnClose">Cancel</button>
+        <button type="button" class="btn btn-primary" disabled="@(_chosen is null || _saving)" @onclick="AssignAsync">
+            <Icon Name="check" /> Assign
+        </button>
+    </div>
+</Modal>
+
+@code {
+    private IReadOnlyList<ProposalRow>? _proposals;
+    private Guid? _chosen;
+    private bool _saving;
+    private string? _error;
+
+    [Parameter, EditorRequired]
+    public ShipmentRow Shipment { get; set; } = null!;
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    [Parameter]
+    public EventCallback OnAssigned { get; set; }
+
+    private string Description =>
+        $"{Shipment.PartnerName}, {Shipment.PickupPointName} → {Shipment.DropoffAddressLine}. Needs at least: {Shipment.RequiredVehicleName} ({Labels.Weight(Shipment.WeightG)}, size {Shipment.LargestSizeClass}).";
+
+    private IReadOnlyList<MapMarker> Markers =>
+    [
+        new(Shipment.PickupLatitude, Shipment.PickupLongitude, $"{Shipment.PartnerName} - {Shipment.PickupPointName}"),
+        new(Shipment.DropoffLatitude, Shipment.DropoffLongitude, Shipment.CustomerName, "customer"),
+        .. (_proposals ?? [])
+            .Where(c => c is { LastLatitude: not null, LastLongitude: not null })
+            .Select(c => new MapMarker(
+                c.LastLatitude!.Value,
+                c.LastLongitude!.Value,
+                c.DisplayName,
+                c.CourierId == _chosen ? "picked" : "courier",
+                $"{c.DisplayName}\n{c.VehicleName} · {Labels.Distance(c.DistanceM)} to pickup"
+            )),
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _proposals = await Dispatch.ProposalsAsync(Shipment.Id);
+        _chosen = _proposals.FirstOrDefault()?.CourierId;
+    }
+
+    private async Task AssignAsync()
+    {
+        if (_chosen is not { } courierId)
+            return;
+        _saving = true;
+        _error = null;
+        var result = await Dispatch.AssignAsync(new Application.Dispatch.AssignCourier(Shipment.Id, courierId, Shipment.RowVersion));
+        _saving = false;
+        if (result.Error is { } error)
+            _error = error.Message;
+        else
+            await OnAssigned.InvokeAsync();
+    }
+}

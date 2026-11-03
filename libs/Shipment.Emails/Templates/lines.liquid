@@ -1,0 +1,23 @@
+<!-- The lines that are (or will be) delivered, with the totals. -->
+<tr>
+   <td class="content-padding" style="padding: 20px 32px 0 32px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+             style="border-collapse: collapse; width: 100%; font-size: 14px; line-height: 22px; color: #17202a;">
+         {% for line in Lines %}
+         <tr>
+            <td style="padding: 6px 0; border-bottom: 1px solid #e9edf1;">{{ line.Quantity }} &times; {{ line.Name }}</td>
+            <td align="right" style="padding: 6px 0; border-bottom: 1px solid #e9edf1; white-space: nowrap;">{{ line.Amount }}</td>
+         </tr>
+         {% endfor %}
+         <tr><td style="padding: 6px 0; color: #5f6b78;">Goods</td><td align="right" style="padding: 6px 0;">{{ Goods }}</td></tr>
+         <tr><td style="padding: 0 0 6px 0; color: #5f6b78;">Delivery fee</td><td align="right" style="padding: 0 0 6px 0;">{{ DeliveryFee }}</td></tr>
+         {% if HasTip %}
+         <tr><td style="padding: 0 0 6px 0; color: #5f6b78;">Tip for the courier</td><td align="right" style="padding: 0 0 6px 0;">{{ Tip }}</td></tr>
+         {% endif %}
+         <tr>
+            <td style="padding: 8px 0; border-top: 1px solid #dfe3e8; font-weight: 600;">Total</td>
+            <td align="right" style="padding: 8px 0; border-top: 1px solid #dfe3e8; font-weight: 600;">{{ Total }}</td>
+         </tr>
+      </table>
+   </td>
+</tr>

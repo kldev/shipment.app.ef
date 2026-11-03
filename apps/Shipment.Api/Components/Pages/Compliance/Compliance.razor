@@ -1,0 +1,127 @@
+@page "/compliance"
+@inject ComplianceService Documents
+
+<PageTitle>Compliance · Shipment</PageTitle>
+
+<PageHeader Eyebrow="Control" Title="Compliance"
+            Description="Every courier needs a verified, valid ID card; a car or a van also a driving licence and insurance. Not cleared = no orders." />
+
+<ErrorAlert Message="@_error" />
+
+<div class="mb-5 grid gap-4 sm:grid-cols-3">
+    <div class="card p-4">
+        <p class="field-label">Cleared</p>
+        <p class="mt-1 text-2xl font-semibold text-success tabular-nums">@_rows.Count(r => r.Cleared)</p>
+    </div>
+    <div class="card p-4">
+        <p class="field-label">Not cleared</p>
+        <p class="mt-1 text-2xl font-semibold text-destructive tabular-nums">@_rows.Count(r => !r.Cleared)</p>
+    </div>
+    <div class="card p-4">
+        <p class="field-label">A document expires within 30 days</p>
+        <p class="mt-1 text-2xl font-semibold tabular-nums">@_rows.Count(r => r.ExpiringSoon)</p>
+    </div>
+</div>
+
+<div class="space-y-3">
+    @foreach (var row in _rows)
+    {
+        var documents = _documents.Where(d => d.CourierId == row.CourierId).OrderBy(d => d.Kind).ToList();
+        <div class="card p-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                    <span class="flex size-9 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+                        <Icon Name="@Labels.VehicleIcon(row.VehicleType)" />
+                    </span>
+                    <div>
+                        <p class="font-medium">@row.DisplayName</p>
+                        <p class="text-xs text-muted-foreground">
+                            @(row.NextExpiry is { } next ? $"next expiry {Labels.Date(next)}" : "no valid document")
+                        </p>
+                    </div>
+                    @if (row.Cleared)
+                    {
+                        <span class="badge badge-success">cleared</span>
+                    }
+                    else
+                    {
+                        <span class="badge badge-destructive">not cleared</span>
+                    }
+                    @foreach (var reason in row.Reasons)
+                    {
+                        <span class="badge badge-outline">@reason</span>
+                    }
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm" @onclick="() => Open(row, null)"><Icon Name="plus" /> Document</button>
+            </div>
+            @if (documents.Count > 0)
+            {
+                <table class="table mt-3 table-fixed">
+                    <colgroup><col class="w-[30%]" /><col class="w-[20%]" /><col class="w-[18%]" /><col class="w-[16%]" /><col class="w-[16%]" /></colgroup>
+                    <tbody>
+                        @foreach (var document in documents)
+                        {
+                            <tr>
+                                <td>@Labels.DocumentKind(document.Kind)</td>
+                                <td class="font-mono text-xs">@document.Number</td>
+                                <td>@Labels.Date(document.ValidUntil)</td>
+                                <td><DocumentState State="@document.State" DaysLeft="document.DaysLeft" /></td>
+                                <td class="text-right whitespace-nowrap">
+                                    @if (document.VerifiedAt is null)
+                                    {
+                                        <button type="button" class="btn btn-outline btn-sm" @onclick="() => VerifyAsync(document)">
+                                            <Icon Name="badge-check" /> Verify
+                                        </button>
+                                    }
+                                    <button type="button" class="btn btn-ghost btn-sm" @onclick="() => Open(row, document)">Renew</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    }
+</div>
+
+@if (_editing is not null)
+{
+    <DocumentEditor CourierId="_editing.CourierId" CourierName="@_editing.DisplayName" Document="_document"
+                    OnClose="() => _editing = null" OnSaved="SavedAsync" />
+}
+
+@code {
+    private List<ClearanceRow> _rows = [];
+    private IReadOnlyList<DocumentRow> _documents = [];
+    private ClearanceRow? _editing;
+    private DocumentRow? _document;
+    private string? _error;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        // Not cleared first, then documents about to expire.
+        _rows = (await Documents.ListClearanceAsync())
+            .OrderBy(r => r.Cleared)
+            .ThenByDescending(r => r.ExpiringSoon)
+            .ThenBy(r => r.DisplayName)
+            .ToList();
+        _documents = await Documents.ListDocumentsAsync();
+    }
+
+    private void Open(ClearanceRow row, DocumentRow? document) => (_editing, _document) = (row, document);
+
+    private async Task SavedAsync()
+    {
+        _editing = null;
+        await LoadAsync();
+    }
+
+    private async Task VerifyAsync(DocumentRow document)
+    {
+        var result = await Documents.VerifyDocumentAsync(new VerifyDocument(document.Id, document.RowVersion));
+        _error = result.Error?.Message;
+        await LoadAsync();
+    }
+}

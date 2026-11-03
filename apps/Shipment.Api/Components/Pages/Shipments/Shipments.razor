@@ -1,0 +1,127 @@
+@page "/shipments"
+@inject DispatchService Dispatch
+
+<PageTitle>Shipments · Shipment</PageTitle>
+
+<PageHeader Eyebrow="Operations" Title="Shipments"
+            Description="What the stores packed, on its way to the customer. A shipment appears when picking ends; assign it to a courier whose vehicle carries it.">
+    <Actions>
+        <button type="button" class="btn btn-outline" @onclick="LoadAsync"><Icon Name="refresh-cw" /> Refresh</button>
+    </Actions>
+</PageHeader>
+
+<ErrorAlert Message="@_error" />
+
+<div class="mb-4 flex flex-wrap items-center gap-2">
+    @foreach (var (name, statuses) in Tabs)
+    {
+        <button type="button" class="@($"btn btn-sm {(_tab == name ? "btn-secondary" : "btn-ghost")}")" @onclick="() => _tab = name">
+            @name <span class="text-muted-foreground tabular-nums">@_shipments.Count(s => statuses.Length == 0 || statuses.Contains(s.Status))</span>
+        </button>
+    }
+</div>
+
+@if (_loaded && !Visible.Any())
+{
+    <EmptyState IconName="package" Title="No shipments here" Description="Finish picking an order and its shipment shows up as available." />
+}
+else
+{
+    <div class="card overflow-x-auto">
+        <table class="table">
+            <thead>
+                <tr><th>Shipment</th><th>From</th><th>To</th><th>Freight</th><th>Status</th><th class="text-right">Waiting</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var shipment in Visible)
+                {
+                    <tr>
+                        <td>
+                            <a href="@($"shipments/{shipment.Id}")" class="font-mono font-medium hover:underline">@shipment.Code</a>
+                            <p class="font-mono text-xs text-muted-foreground">@shipment.OrderCode</p>
+                        </td>
+                        <td>
+                            <p>@shipment.PartnerName</p>
+                            <p class="text-xs text-muted-foreground">@shipment.PickupPointName</p>
+                        </td>
+                        <td>
+                            <p>@shipment.CustomerName</p>
+                            <p class="text-xs text-muted-foreground">@shipment.DropoffAddressLine · @Labels.Distance(shipment.DistanceM)</p>
+                        </td>
+                        <td class="whitespace-nowrap">
+                            <span class="inline-flex items-center gap-1.5" title="Needs at least: @shipment.RequiredVehicleName">
+                                <Icon Name="@Labels.VehicleIcon(shipment.RequiredVehicle)" /> @shipment.RequiredVehicleName
+                            </span>
+                            <span class="ml-1 text-xs text-muted-foreground">@Labels.Weight(shipment.WeightG) · @shipment.LargestSizeClass</span>
+                            @if (shipment.AgeCheckRequired)
+                            {
+                                <span class="badge badge-outline ml-1" title="18+ products: the courier checks the ID">18+</span>
+                            }
+                        </td>
+                        <td><ShipmentStatusBadge Status="@shipment.Status" /></td>
+                        <td class="@($"text-right text-sm tabular-nums {(shipment is { Status: ShipmentStatus.Available, WaitingMinutes: >= 10 } ? "font-semibold text-destructive" : "text-muted-foreground")}")">
+                            @shipment.WaitingMinutes min
+                        </td>
+                        <td class="text-right whitespace-nowrap">
+                            @if (shipment.Status == ShipmentStatus.Available)
+                            {
+                                <button type="button" class="btn btn-primary btn-sm" @onclick="() => _assigning = shipment"><Icon Name="bike" /> Assign</button>
+                            }
+                            else
+                            {
+                                <a href="@($"shipments/{shipment.Id}")" class="btn btn-ghost btn-sm">Open</a>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@if (_assigning is not null)
+{
+    <AssignCourier Shipment="_assigning" OnClose="() => _assigning = null" OnAssigned="AssignedAsync" />
+}
+
+@code {
+    private static readonly (string Name, ShipmentStatus[] Statuses)[] Tabs =
+    [
+        ("Waiting", [ShipmentStatus.Available]),
+        ("To pickup", [ShipmentStatus.CourierAssigned, ShipmentStatus.ArrivedAtPickup]),
+        ("On the way", [ShipmentStatus.PickedUp, ShipmentStatus.ArrivedAtCustomer]),
+        ("Delivered", [ShipmentStatus.Delivered]),
+        ("Failed", [ShipmentStatus.Failed]),
+        ("All", []),
+    ];
+
+    private IReadOnlyList<ShipmentRow> _shipments = [];
+    private string _tab = "Waiting";
+    private ShipmentRow? _assigning;
+    private string? _error;
+    private bool _loaded;
+
+    private IEnumerable<ShipmentRow> Visible
+    {
+        get
+        {
+            var statuses = Tabs.First(t => t.Name == _tab).Statuses;
+            return _shipments.Where(s => statuses.Length == 0 || statuses.Contains(s.Status));
+        }
+    }
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _error = null;
+        _shipments = await Dispatch.ListShipmentsAsync();
+        _loaded = true;
+    }
+
+    private async Task AssignedAsync()
+    {
+        _assigning = null;
+        await LoadAsync();
+    }
+}

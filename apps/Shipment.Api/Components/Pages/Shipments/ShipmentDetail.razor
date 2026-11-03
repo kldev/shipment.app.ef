@@ -1,0 +1,331 @@
+@page "/shipments/{Id:guid}"
+@inject DispatchService Dispatch
+@inject CrmService Crm
+@inject OrderingService Ordering
+@inject CarriersService Carriers
+@inject ComplianceService Compliance
+
+@* The shipment as CodeOpinion's example shows it: each card reads its own context's view by id (ADR 0010) and fails
+   alone - origin (crm), destination and status (dispatch), customer (crm), freight (ordering), courier (carriers),
+   compliance, location (tracking). The admin moves the shipment for the courier in the demo (ADR 0006). *@
+
+<PageTitle>@(_shipment?.Code ?? "Shipment") · Shipment</PageTitle>
+
+<a href="shipments" class="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+    <Icon Name="arrow-left" /> Back to shipments
+</a>
+
+<ErrorAlert Message="@_error" />
+
+@if (_shipment is null)
+{
+    @if (_error is null)
+    {
+        <div class="h-40 animate-pulse rounded-xl bg-muted"></div>
+    }
+}
+else
+{
+    var next = Labels.NextStep(_shipment.Status);
+    <header class="mb-5 flex flex-wrap items-start justify-between gap-4">
+        <div>
+            <p class="eyebrow">Shipment</p>
+            <h1 class="page-title flex items-center gap-3"><span class="font-mono">@_shipment.Code</span> <ShipmentStatusBadge Status="@_shipment.Status" /></h1>
+            <p class="text-sm text-muted-foreground">
+                Order <a href="@($"orders/{_shipment.OrderId}")" class="font-mono hover:underline">@_shipment.OrderCode</a>
+                · created @Labels.DateTime(_shipment.CreatedAt)
+            </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+            @if (_shipment.Status == ShipmentStatus.Available)
+            {
+                <button type="button" class="btn btn-primary" @onclick="() => _assigning = true"><Icon Name="bike" /> Assign a courier</button>
+            }
+            @if (_shipment.Status is ShipmentStatus.CourierAssigned or ShipmentStatus.ArrivedAtPickup)
+            {
+                <button type="button" class="btn btn-ghost" disabled="@_saving" @onclick="UnassignAsync">Unassign</button>
+            }
+            @if (_shipment.Status is ShipmentStatus.PickedUp or ShipmentStatus.ArrivedAtCustomer)
+            {
+                <button type="button" class="btn btn-ghost text-destructive" @onclick="() => _failing = true"><Icon Name="ban" /> Failed</button>
+            }
+            @if (next is { } step)
+            {
+                @if (step.Status == ShipmentStatus.Delivered && _shipment.AgeCheckRequired)
+                {
+                    <label class="inline-flex items-center gap-2 text-sm">
+                        <input type="checkbox" class="size-4" @bind="_ageChecked" /> ID checked (18+)
+                    </label>
+                }
+                <button type="button" class="btn btn-primary" disabled="@_saving" @onclick="() => AdvanceAsync(step.Status)">
+                    <Icon Name="@(step.Status == ShipmentStatus.Delivered ? "package-check" : "arrow-right")" /> @step.Action
+                </button>
+            }
+        </div>
+    </header>
+
+    <ErrorAlert Message="@_actionError" />
+
+    <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <Card Title="Origin" Icon="store" Error="@_pointError">
+            <p class="font-medium">@_shipment.PartnerName - @(_point?.Name ?? _shipment.PickupPointName)</p>
+            <p class="text-muted-foreground">@(_point?.AddressLine ?? _shipment.PickupAddressLine)@(_point is null ? "" : $", {_point.Postcode} {_point.City}")</p>
+            @if (_point is not null)
+            {
+                <p class="text-xs text-muted-foreground">
+                    Open @Labels.Clock(_point.OpensMinute)-@Labels.Clock(_point.ClosesMinute)
+                    @(_point.IsOpenNow ? "· open now" : "· closed now")
+                </p>
+            }
+        </Card>
+
+        <Card Title="Destination" Icon="map-pin">
+            <p class="font-medium">@_shipment.DropoffLabel</p>
+            <p class="text-muted-foreground">@_shipment.DropoffAddressLine, @_shipment.DropoffCity</p>
+            @if (_shipment.DropoffNotes is not null)
+            {
+                <p class="text-xs text-muted-foreground italic">@_shipment.DropoffNotes</p>
+            }
+            <p class="text-xs text-muted-foreground">@Labels.Distance(_shipment.DistanceM) from the pickup point in a straight line</p>
+        </Card>
+
+        <Card Title="Customer" Icon="user-round" Error="@_customerError">
+            <p class="font-medium">@(_customer?.DisplayName ?? _shipment.CustomerName)</p>
+            @if (_customer is not null)
+            {
+                <p class="flex items-center gap-1.5 text-muted-foreground"><Icon Name="mail" /> @_customer.Email</p>
+                @if (_customer.Phone is not null)
+                {
+                    <p class="flex items-center gap-1.5 text-muted-foreground"><Icon Name="phone" /> @_customer.Phone</p>
+                }
+            }
+        </Card>
+
+        <Card Title="Freight" Icon="package" Error="@_linesError">
+            <p class="text-muted-foreground">
+                @_shipment.ItemCount items · @Labels.Weight(_shipment.WeightG) · largest @_shipment.LargestSizeClass
+            </p>
+            <ul class="mt-1 space-y-0.5">
+                @foreach (var line in _lines.Where(l => (l.PickedQuantity ?? l.Quantity) > 0))
+                {
+                    <li class="flex justify-between gap-2">
+                        <span>@(line.PickedQuantity ?? line.Quantity) × @line.Name</span>
+                        @if (line.AgeRestricted)
+                        {
+                            <span class="badge badge-outline">18+</span>
+                        }
+                    </li>
+                }
+            </ul>
+        </Card>
+
+        <Card Title="Current status" Icon="activity">
+            <p><ShipmentStatusBadge Status="@_shipment.Status" /></p>
+            <p class="text-muted-foreground">
+                @(_shipment.Status switch
+                {
+                    ShipmentStatus.Available => $"Waiting for a courier for {_shipment.WaitingMinutes} min.",
+                    ShipmentStatus.Delivered => $"Delivered {Labels.DateTime(_shipment.DeliveredAt)}.",
+                    ShipmentStatus.Failed => $"Failed: {_shipment.FailureReason}",
+                    _ => $"Next: {Labels.NextStep(_shipment.Status)?.Action.ToLowerInvariant()}.",
+                })
+            </p>
+            <p class="flex items-center gap-1.5 text-muted-foreground">
+                <Icon Name="@Labels.VehicleIcon(_shipment.RequiredVehicle)" /> needs at least a @_shipment.RequiredVehicleName.ToLowerInvariant()
+            </p>
+        </Card>
+
+        <Card Title="Shipment progress" Icon="route">
+            <ol class="space-y-1.5">
+                @foreach (var (name, at) in Timeline)
+                {
+                    <li class="flex items-center gap-3">
+                        <span class="@($"size-2.5 rounded-full {(at is null ? "bg-muted" : "bg-primary")}")"></span>
+                        <span class="w-36 font-medium">@name</span>
+                        <span class="text-muted-foreground">@(at is null ? "–" : Labels.Time(at))</span>
+                    </li>
+                }
+            </ol>
+        </Card>
+
+        <Card Title="Courier & vehicle" Icon="bike" Error="@_courierError">
+            @if (_courier is null)
+            {
+                <p class="text-muted-foreground">No courier yet.</p>
+            }
+            else
+            {
+                <p class="font-medium">@_courier.DisplayName</p>
+                <p class="flex items-center gap-1.5 text-muted-foreground"><Icon Name="phone" /> @_courier.Phone</p>
+                <p class="flex items-center gap-1.5">
+                    <Icon Name="@Labels.VehicleIcon(_courier.VehicleType)" /> @_courier.VehicleName
+                    @if (_courier.VehiclePlate is not null)
+                    {
+                        <span class="font-mono text-xs text-muted-foreground">@_courier.VehiclePlate</span>
+                    }
+                </p>
+                <p><ShiftBadge Status="@_courier.ShiftStatus" /></p>
+            }
+        </Card>
+
+        <Card Title="Compliance" Icon="shield-check" Error="@_clearanceError">
+            @if (_clearance is not null)
+            {
+                <p>
+                    @if (_clearance.Cleared)
+                    {
+                        <span class="badge badge-success">courier cleared</span>
+                    }
+                    else
+                    {
+                        <span class="badge badge-destructive">not cleared</span>
+                        <span class="text-xs text-muted-foreground">@string.Join(", ", _clearance.Reasons)</span>
+                    }
+                </p>
+            }
+            <p class="flex items-center gap-1.5 @(_shipment.AgeCheckRequired ? "text-warning" : "text-muted-foreground")">
+                <Icon Name="id-card" />
+                @(!_shipment.AgeCheckRequired
+                    ? "No ID check needed."
+                    : _shipment.AgeChecked ? "ID checked at the door." : "18+ products: check the ID at the door.")
+            </p>
+        </Card>
+
+        <BillingCard OrderId="_shipment.OrderId" Status="_shipment.Status" />
+        <CurrentLocation ShipmentId="Id" Status="_shipment.Status" />
+    </section>
+}
+
+@if (_assigning && _shipment is not null)
+{
+    <AssignCourier Shipment="_shipment" OnClose="() => _assigning = false" OnAssigned="AssignedAsync" />
+}
+@if (_failing && _shipment is not null)
+{
+    <Modal Title="@($"{_shipment.Code} failed")" Description="The order ends here - no second courier; the customer is refunded." OnClose="() => _failing = false">
+        <form class="space-y-4" @onsubmit="FailAsync" @onsubmit:preventDefault="true">
+            <ErrorAlert Message="@_failError" />
+            <div class="space-y-2">
+                <label class="label" for="fail-reason">What happened</label>
+                <input id="fail-reason" class="input" @bind="_reason" required maxlength="500" placeholder="Customer absent, phone off" />
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" class="btn btn-ghost" @onclick="() => _failing = false">Back</button>
+                <button type="submit" class="btn btn-destructive" disabled="@_saving">Mark as failed</button>
+            </div>
+        </form>
+    </Modal>
+}
+
+@code {
+    private ShipmentRow? _shipment;
+    private PickupPointRow? _point;
+    private CustomerRow? _customer;
+    private IReadOnlyList<OrderLineRow> _lines = [];
+    private CourierRow? _courier;
+    private ClearanceRow? _clearance;
+    private string? _error;
+    private string? _pointError;
+    private string? _customerError;
+    private string? _linesError;
+    private string? _courierError;
+    private string? _clearanceError;
+    private string? _actionError;
+    private string? _failError;
+    private bool _assigning;
+    private bool _failing;
+    private bool _ageChecked;
+    private bool _saving;
+    private string _reason = "";
+
+    [Parameter]
+    public Guid Id { get; set; }
+
+    private IEnumerable<(string Name, DateTimeOffset? At)> Timeline =>
+        _shipment is null
+            ? []
+            :
+            [
+                ("Available", _shipment.CreatedAt),
+                ("Courier assigned", _shipment.AssignedAt),
+                ("Arrived at pickup", _shipment.ArrivedAtPickupAt),
+                ("Picked up", _shipment.PickedUpAt),
+                ("Arrived at customer", _shipment.ArrivedAtCustomerAt),
+                (_shipment.Status == ShipmentStatus.Failed ? "Failed" : "Delivered", _shipment.FailedAt ?? _shipment.DeliveredAt),
+            ];
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _shipment = await Dispatch.GetShipmentAsync(Id);
+        if (_shipment is null)
+        {
+            _error = "Shipment not found.";
+            return;
+        }
+        // Each card its own context and its own failure (ADR 0010).
+        var shipment = _shipment;
+        _pointError = await CardAsync(async () => _point = await Crm.GetPickupPointAsync(shipment.PickupPointId));
+        _customerError = await CardAsync(async () => _customer = await Crm.GetCustomerAsync(shipment.CustomerId));
+        _linesError = await CardAsync(async () => _lines = await Ordering.ListLinesAsync(shipment.OrderId));
+        _courier = null;
+        _clearance = null;
+        if (shipment.CourierId is { } courierId)
+        {
+            _courierError = await CardAsync(async () => _courier = await Carriers.GetCourierAsync(courierId));
+            _clearanceError = await CardAsync(async () =>
+                _clearance = (await Compliance.ListClearanceAsync(courierId)).FirstOrDefault()
+            );
+        }
+    }
+
+    private static async Task<string?> CardAsync(Func<Task> load)
+    {
+        try
+        {
+            await load();
+            return null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return "This card could not be loaded. Try again.";
+        }
+    }
+
+    private async Task ActAsync(Func<Task<Result<uint>>> action)
+    {
+        _saving = true;
+        _actionError = null;
+        var result = await action();
+        _saving = false;
+        _actionError = result.Error?.Message;
+        await LoadAsync();
+    }
+
+    private Task AdvanceAsync(ShipmentStatus status) =>
+        ActAsync(() => Dispatch.AdvanceAsync(new AdvanceShipment(Id, status, _shipment!.RowVersion, _ageChecked)));
+
+    private Task UnassignAsync() => ActAsync(() => Dispatch.UnassignAsync(new UnassignCourier(Id, _shipment!.RowVersion)));
+
+    private async Task FailAsync()
+    {
+        _saving = true;
+        _failError = null;
+        var result = await Dispatch.FailAsync(new FailShipment(Id, _reason, _shipment!.RowVersion));
+        _saving = false;
+        if (result.Error is { } error)
+        {
+            _failError = error.Message;
+            return;
+        }
+        _failing = false;
+        await LoadAsync();
+    }
+
+    private async Task AssignedAsync()
+    {
+        _assigning = false;
+        await LoadAsync();
+    }
+}

@@ -1,0 +1,47 @@
+@* Moves a courier on the map - the admin acting for the courier's phone (ADR 0006). *@
+@inject CarriersService Carriers
+
+<Modal Title="@($"Where is {Courier.DisplayName}?")" Description="Click the map where the courier is now." Wide="true" OnClose="OnClose">
+    <ErrorAlert Message="@_error" />
+    <Map Class="h-[28rem]" Label="Courier position" Picking="true" PickedLatitude="_latitude" PickedLongitude="_longitude" OnPick="Pick" />
+    <div class="mt-4 flex items-center justify-end gap-2">
+        <span class="mr-auto font-mono text-xs text-muted-foreground">@_latitude, @_longitude</span>
+        <button type="button" class="btn btn-ghost" @onclick="OnClose">Cancel</button>
+        <button type="button" class="btn btn-primary" disabled="@(_saving || _latitude is null)" @onclick="SaveAsync">Move here</button>
+    </div>
+</Modal>
+
+@code {
+    private decimal? _latitude;
+    private decimal? _longitude;
+    private bool _saving;
+    private string? _error;
+
+    [Parameter, EditorRequired]
+    public CourierRow Courier { get; set; } = null!;
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    [Parameter]
+    public EventCallback OnSaved { get; set; }
+
+    protected override void OnInitialized() => (_latitude, _longitude) = (Courier.LastLatitude, Courier.LastLongitude);
+
+    private void Pick((decimal Latitude, decimal Longitude) place) =>
+        (_latitude, _longitude) = (place.Latitude, place.Longitude);
+
+    private async Task SaveAsync()
+    {
+        if (_latitude is not { } latitude || _longitude is not { } longitude)
+            return;
+        _saving = true;
+        _error = null;
+        var result = await Carriers.SetPositionAsync(new SetCourierPosition(Courier.Id, latitude, longitude));
+        _saving = false;
+        if (result.Error is { } error)
+            _error = error.Message;
+        else
+            await OnSaved.InvokeAsync();
+    }
+}

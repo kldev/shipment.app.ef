@@ -1,0 +1,28 @@
+@* valid / expiring / expired / unverified as a badge, with the days left when it matters. *@
+<span class="@($"badge {Style}")">@Text</span>
+
+@code {
+    [Parameter]
+    public Domain.Compliance.DocumentState State { get; set; }
+
+    [Parameter]
+    public int? DaysLeft { get; set; }
+
+    private string Style =>
+        State switch
+        {
+            Domain.Compliance.DocumentState.Valid => "badge-success",
+            Domain.Compliance.DocumentState.Expiring => "badge-warning",
+            Domain.Compliance.DocumentState.Expired => "badge-destructive",
+            _ => "badge-secondary",
+        };
+
+    private string Text =>
+        State switch
+        {
+            Domain.Compliance.DocumentState.Expiring => $"expires in {DaysLeft} days",
+            Domain.Compliance.DocumentState.Expired => "expired",
+            Domain.Compliance.DocumentState.Unverified => "not verified",
+            _ => "valid",
+        };
+}

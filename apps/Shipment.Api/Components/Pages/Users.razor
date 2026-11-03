@@ -1,0 +1,41 @@
+@page "/users"
+@inject PlatformService Platform
+
+<PageTitle>Users · Shipment</PageTitle>
+
+<PageHeader Eyebrow="Admin" Title="Users" Description="The operator's people. Everyone is an admin for now; the username signs in, the e-mail gets the notifications." />
+
+
+@if (_rows is null)
+{
+    <div class="h-32 animate-pulse rounded-xl bg-muted"></div>
+}
+else if (_rows is not null)
+{
+    <div class="card overflow-x-auto">
+        <table class="table">
+            <thead>
+                <tr><th>Name</th><th>Username</th><th>E-mail</th><th>Role</th><th>Status</th><th>Since</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var user in _rows)
+                {
+                    <tr>
+                        <td class="font-medium">@user.DisplayName</td>
+                        <td class="font-mono text-xs">@user.Username</td>
+                        <td>@user.Email</td>
+                        <td><RoleBadge Role="@user.Role" /></td>
+                        <td><span class="@(user.Status == UserStatus.Active ? "badge badge-success" : "badge badge-secondary")">@Labels.Wire(user.Status)</span></td>
+                        <td class="text-muted-foreground">@Labels.DateTime(user.CreatedAt)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<UserRow>? _rows;
+
+    protected override async Task OnInitializedAsync() => _rows = await Platform.ListUsersAsync();
+}

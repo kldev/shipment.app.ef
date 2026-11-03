@@ -1,0 +1,140 @@
+@* Create or edit a product of a partner's catalog. The id of a new one is made here (ADR 0009). *@
+@inject CatalogService Catalog
+
+<Modal Title="@(Product is null ? "New product" : "Edit product")" OnClose="OnClose">
+    <form class="space-y-4" @onsubmit="SaveAsync" @onsubmit:preventDefault="true">
+        <ErrorAlert Message="@_error" />
+        <div class="grid gap-4 sm:grid-cols-3">
+            <div class="space-y-2 sm:col-span-2">
+                <label class="label" for="product-name">Name</label>
+                <input id="product-name" class="input" @bind="_name" required maxlength="200" />
+            </div>
+            <div class="space-y-2">
+                <label class="label" for="product-sku">SKU</label>
+                <input id="product-sku" class="input font-mono uppercase" @bind="_sku" required maxlength="40" />
+            </div>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-3">
+            <div class="space-y-2">
+                <label class="label" for="product-category">Category</label>
+                <input id="product-category" class="input" @bind="_category" list="product-categories" required maxlength="40" placeholder="fruit_veg" />
+                <datalist id="product-categories">
+                    @foreach (var category in Categories)
+                    {
+                        <option value="@category"></option>
+                    }
+                </datalist>
+            </div>
+            <div class="space-y-2">
+                <label class="label" for="product-price">Price (PLN)</label>
+                <input id="product-price" type="number" min="0.01" step="0.01" class="input" @bind="_price" />
+            </div>
+            <div class="space-y-2">
+                <label class="label" for="product-weight">Weight (g)</label>
+                <input id="product-weight" type="number" min="1" step="1" class="input" @bind="_weight" />
+            </div>
+        </div>
+        <div class="space-y-2">
+            <label class="label" for="product-size">Size</label>
+            <select id="product-size" class="input" @bind="_size">
+                @foreach (var size in Labels.SizeClasses)
+                {
+                    <option value="@size.Value">@size.Name</option>
+                }
+            </select>
+        </div>
+        <div class="space-y-2">
+            <label class="label" for="product-description">Description</label>
+            <textarea id="product-description" class="input h-20 py-2" @bind="_description" maxlength="1000"></textarea>
+        </div>
+        <div class="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+            <label class="flex items-center gap-2"><input type="checkbox" @bind="_ageRestricted" /> 18+ - ID check at handover</label>
+            @if (Product is not null)
+            {
+                <label class="flex items-center gap-2"><input type="checkbox" @bind="_listed" /> Listed as available</label>
+            }
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+            <button type="button" class="btn btn-ghost" @onclick="OnClose">Cancel</button>
+            <button type="submit" class="btn btn-primary" disabled="@_saving">Save</button>
+        </div>
+    </form>
+</Modal>
+
+@code {
+    private readonly Guid _newId = Guid.CreateVersion7();
+    private string _name = "";
+    private string _sku = "";
+    private string _category = "";
+    private decimal _price = 9.99m;
+    private int _weight = 500;
+    private SizeClass _size = SizeClass.S;
+    private string? _description;
+    private bool _ageRestricted;
+    private bool _listed = true;
+    private bool _saving;
+    private string? _error;
+
+    [Parameter, EditorRequired]
+    public Guid PartnerId { get; set; }
+
+    /// <summary>The product to edit; null = a new one.</summary>
+    [Parameter]
+    public ProductRow? Product { get; set; }
+
+    /// <summary>The partner's categories, suggested in the category field.</summary>
+    [Parameter]
+    public IReadOnlyList<string> Categories { get; set; } = [];
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    [Parameter]
+    public EventCallback OnSaved { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (Product is null)
+            return;
+        _name = Product.Name;
+        _sku = Product.Sku;
+        _category = Product.Category;
+        _price = Product.PriceMinor / 100m;
+        _weight = Product.WeightG;
+        _size = Product.SizeClass;
+        _description = Product.Description;
+        _ageRestricted = Product.AgeRestricted;
+        _listed = Product.ListedAvailable;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _error = null;
+        var priceMinor = (long)Math.Round(_price * 100);
+        var result = Product is null
+            ? await Catalog.CreateProductAsync(
+                new CreateProduct(_newId, PartnerId, _sku, _name, _category, priceMinor, _weight, _size, _ageRestricted, _description)
+            )
+            : await Catalog.UpdateProductAsync(
+                new UpdateProduct(
+                    Product.Id,
+                    _sku,
+                    _name,
+                    _category,
+                    priceMinor,
+                    _weight,
+                    _size,
+                    _ageRestricted,
+                    _listed,
+                    Product.RowVersion,
+                    _description
+                )
+            );
+        _saving = false;
+        if (result.Error is { } error)
+            _error = error.Message;
+        else
+            await OnSaved.InvokeAsync();
+    }
+}

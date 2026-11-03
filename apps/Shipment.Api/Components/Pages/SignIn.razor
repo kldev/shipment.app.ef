@@ -1,0 +1,74 @@
+@page "/sign-in"
+@layout AuthLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@using Microsoft.Extensions.Options
+@inject IOptions<DemoSignInOptions> Demo
+
+<PageTitle>Sign in · Shipment</PageTitle>
+
+<div class="w-full max-w-sm space-y-6">
+    <div class="flex flex-col items-center gap-4 text-center">
+        <BrandMark TextClass="text-foreground" />
+        <div class="space-y-1.5">
+            <h1 class="text-2xl font-semibold">Sign in</h1>
+            <p class="text-sm text-muted-foreground">Dispatch, track and bill deliveries in one place.</p>
+        </div>
+    </div>
+
+    <div class="card p-6">
+        @* A plain form: /auth/login checks the password, writes the session cookie and redirects (AuthEndpoints). *@
+        <form method="post" action="auth/login" class="space-y-4" data-enhance="false">
+            <input type="hidden" name="returnUrl" value="@AuthEndpoints.LocalUrl(ReturnUrl)" />
+            @if (Error == "expired")
+            {
+                <p class="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">@Message</p>
+            }
+            else
+            {
+                <ErrorAlert Message="@Message" />
+            }
+            <div class="space-y-2">
+                <label for="username" class="label">Username</label>
+                <input id="username" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required class="input" />
+            </div>
+            <div class="space-y-2">
+                <label for="password" class="label">Password</label>
+                <input id="password" name="password" type="password" autocomplete="current-password" required class="input" />
+            </div>
+            <button type="submit" class="btn btn-primary w-full">Sign in</button>
+        </form>
+        @if (Demo.Value.Enabled)
+        {
+            @* The local demo only (DemoSignIn__Enabled): straight in, no password. *@
+            <div class="my-5 flex items-center gap-3 text-xs text-muted-foreground">
+                <span class="h-px flex-1 bg-border"></span>demo<span class="h-px flex-1 bg-border"></span>
+            </div>
+            <form method="post" action="auth/demo-login" data-enhance="false">
+                <input type="hidden" name="returnUrl" value="@AuthEndpoints.LocalUrl(ReturnUrl)" />
+                <button type="submit" class="btn btn-outline w-full"><Icon Name="lock-keyhole" Class="size-4" /> Sign in as the default admin</button>
+            </form>
+            <p class="mt-2 text-center text-xs text-muted-foreground">No password, account <span class="font-mono">@Demo.Value.Username</span> - local demo only.</p>
+        }
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? Error { get; set; }
+
+    private string? Message =>
+        Error switch
+        {
+            null or "" => null,
+            "invalid" => "Wrong username or password.",
+            "inactive" => "This account is not active. Ask an admin.",
+            "throttled" => "Too many attempts. Wait a minute and try again.",
+            "expired" => "Your session has expired. Sign in again.",
+            "demo" => "The default admin does not exist or is not active.",
+            _ => "Sign-in failed. Try again.",
+        };
+}

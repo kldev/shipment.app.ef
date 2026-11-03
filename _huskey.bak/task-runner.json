@@ -1,0 +1,36 @@
+{
+  "$schema": "https://alirezanet.github.io/Husky.Net/schema.json",
+  "tasks": [
+    {
+      "name": "csharpier-check",
+      "group": "pre-commit",
+      "command": "dotnet",
+      "args": [
+        "csharpier",
+        "check",
+        "."
+      ]
+    },
+    {
+      "name": "module-changesets",
+      "group": "pre-commit",
+      "command": "bash",
+      "args": [
+        "db/scripts/check-module-changesets.sh"
+      ]
+    },
+    {
+      "name": "build",
+      "group": "pre-commit",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "Shipment.slnx",
+        "--nologo",
+        "-v",
+        "q",
+        "-m:2"
+      ]
+    }
+  ]
+}

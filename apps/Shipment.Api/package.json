@@ -1,0 +1,16 @@
+{
+  "name": "shipment-web-styles",
+  "private": true,
+  "description": "Tailwind CSS build of the Blazor front and the vendored Leaflet (wwwroot/lib/leaflet, committed) - no JavaScript bundle. Run through MSBuild (Shipment.Api.csproj); npm run vendor:leaflet after a Leaflet upgrade.",
+  "scripts": {
+    "build:css": "tailwindcss -i ./Styles/app.css -o ./wwwroot/css/app.css --minify",
+    "watch:css": "tailwindcss -i ./Styles/app.css -o ./wwwroot/css/app.css --watch",
+    "vendor:leaflet": "rm -rf wwwroot/lib/leaflet && mkdir -p wwwroot/lib/leaflet && cp node_modules/leaflet/dist/leaflet.js node_modules/leaflet/dist/leaflet.css node_modules/leaflet/LICENSE wwwroot/lib/leaflet/"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.3.3",
+    "lucide-static": "^1.61.0",
+    "tailwindcss": "4.3.3",
+    "leaflet": "1.9.4"
+  }
+}

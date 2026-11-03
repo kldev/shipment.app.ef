@@ -1,0 +1,19 @@
+<Solution>
+  <Folder Name="/apps/">
+    <Project Path="apps/Shipment.Api/Shipment.Api.csproj" />
+    <Project Path="apps/Shipment.DbMigrator/Shipment.DbMigrator.csproj" />
+    <Project Path="apps/Shipment.Runner/Shipment.Runner.csproj" />
+  </Folder>
+  <Folder Name="/libs/">
+    <Project Path="libs/Shipment.Application/Shipment.Application.csproj" />
+    <Project Path="libs/Shipment.Domain/Shipment.Domain.csproj" />
+    <Project Path="libs/Shipment.Geo/Shipment.Geo.csproj" />
+    <Project Path="libs/Shipment.Messaging.Contracts/Shipment.Messaging.Contracts.csproj" />
+    <Project Path="libs/Shipment.Observability/Shipment.Observability.csproj" />
+    <Project Path="libs/Shipment.Observability.AspNetCore/Shipment.Observability.AspNetCore.csproj" />
+    <Project Path="libs/Shipment.Persistence/Shipment.Persistence.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Shipment.Tests/Shipment.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,24 @@
+@* A card of a detail page with its own title and its own failure: when the context behind it cannot be read, the card
+   says so and the rest of the page stays (query composition, ADR 0010). *@
+<div class="card space-y-1.5 p-4 text-sm">
+    <p class="card-title mb-2 flex items-center gap-2"><Icon Name="@Icon" Class="size-4 text-muted-foreground" /> @Title</p>
+    @if (Error is not null)
+    {
+        <p class="flex items-center gap-1.5 text-xs text-destructive"><Icon Name="circle-alert" /> @Error</p>
+    }
+    @ChildContent
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = "";
+
+    [Parameter, EditorRequired]
+    public string Icon { get; set; } = "";
+
+    [Parameter]
+    public string? Error { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}

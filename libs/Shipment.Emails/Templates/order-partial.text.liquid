@@ -1,0 +1,11 @@
+Some items were not on the shelf
+
+The store packed your order {{ OrderCode }}, but not everything was there. This is what the courier brings:
+
+{% include 'lines-text' %}
+Not available:
+{% for line in MissingLines %}  {{ line.Quantity }} x {{ line.Name }} - {{ line.Amount }}
+{% endfor %}
+Refund: {{ Refund }} - back to your payment method; you are not charged for these items.
+--
+{{ AppName }} - automated message, replies are not read.

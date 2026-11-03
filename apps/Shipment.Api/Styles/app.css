@@ -1,0 +1,210 @@
+/* Shipment look: Ambit's (ADR 0005) - its tokens on Tailwind CSS v4 with the shadcn-style names the components use.
+   Built by the Tailwind CLI into wwwroot/css/app.css (npm run build:css, run by MSBuild). */
+@import "tailwindcss";
+@source "../Components";
+
+@custom-variant dark (&:is(.dark *));
+
+
+@theme inline {
+  --font-sans:
+    "Inter", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-mono:
+    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-brand: var(--brand);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+/* Ambit's palette (ambit.project web: styles/tokens.css): brand blue #1e4f8f as the accent, a dark navy sidebar in
+   both themes, a light page by default. Dark swaps the page under .dark; the sidebar only gets deeper. */
+:root {
+  --radius: 0.625rem;
+  --brand: #1e4f8f;
+  --background: oklch(0.975 0.004 250);
+  --foreground: oklch(0.24 0.02 255);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.24 0.02 255);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.24 0.02 255);
+  --primary: oklch(0.43 0.118 256.5);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.95 0.008 250);
+  --secondary-foreground: oklch(0.3 0.04 256);
+  --muted: oklch(0.955 0.006 250);
+  --muted-foreground: oklch(0.52 0.02 255);
+  --accent: oklch(0.945 0.02 256);
+  --accent-foreground: oklch(0.35 0.1 256.5);
+  --destructive: oklch(0.56 0.2 27);
+  --success: oklch(0.6 0.14 155);
+  --warning: oklch(0.75 0.15 75);
+  --border: oklch(0.91 0.008 250);
+  --input: oklch(0.88 0.01 250);
+  --ring: oklch(0.55 0.13 256.5);
+  --chart-1: #2a78d6;
+  --chart-2: #eb6834;
+  --chart-3: oklch(0.7 0.12 200);
+  --chart-4: oklch(0.72 0.14 75);
+  --chart-5: oklch(0.6 0.15 20);
+  --sidebar: oklch(0.249 0.02 254.9);
+  --sidebar-foreground: oklch(0.85 0.012 254.9);
+  --sidebar-primary: oklch(0.62 0.12 256.8);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.33 0.035 256.5);
+  --sidebar-accent-foreground: oklch(1 0 0);
+  --sidebar-border: oklch(0.33 0.02 254.9);
+  --sidebar-ring: oklch(0.62 0.12 256.8);
+}
+
+.dark {
+  --background: oklch(0.2 0.012 250);
+  --foreground: oklch(0.95 0.006 250);
+  --card: oklch(0.235 0.014 250);
+  --card-foreground: oklch(0.95 0.006 250);
+  --popover: oklch(0.245 0.014 250);
+  --popover-foreground: oklch(0.95 0.006 250);
+  --primary: oklch(0.62 0.12 256.8);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.28 0.016 250);
+  --secondary-foreground: oklch(0.95 0.006 250);
+  --muted: oklch(0.27 0.014 250);
+  --muted-foreground: oklch(0.72 0.015 250);
+  --accent: oklch(0.29 0.03 256.5);
+  --accent-foreground: oklch(0.96 0.008 250);
+  --destructive: oklch(0.68 0.19 22);
+  --success: oklch(0.72 0.14 155);
+  --warning: oklch(0.8 0.14 80);
+  --border: oklch(0.95 0.01 250 / 11%);
+  --input: oklch(0.95 0.01 250 / 15%);
+  --ring: oklch(0.65 0.12 256.8);
+  --chart-1: #3987e5;
+  --chart-2: #d95926;
+  --sidebar: oklch(0.179 0.013 248.6);
+  --sidebar-accent: oklch(0.27 0.03 256.5);
+  --sidebar-border: oklch(0.26 0.014 248.6);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+
+  /* Native controls (scrollbars, date pickers) follow the theme. */
+  :root { color-scheme: light; }
+  .dark { color-scheme: dark; }
+
+  /* Native select lists: options inherit the control's translucent background and light text, and the browser
+     draws the open list on its own (white on Linux) - unreadable in the dark theme. Give them the popover tokens. */
+  select option,
+  select optgroup {
+    background-color: var(--popover);
+    color: var(--popover-foreground);
+  }
+
+  /* FocusOnNavigate moves focus to the page title for screen readers; no ring for that programmatic focus. */
+  h1:focus { outline: none; }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+/* The few building blocks of shadcn/ui, as classes for Razor markup. */
+/* Leaflet: its panes and controls use z-index up to 1000 - keep them inside the map, under the top bar and dialogs.
+   In the dark theme the light OpenStreetMap tiles are inverted, the markers keep their colours. */
+.leaflet-container { isolation: isolate; z-index: 0; font-family: inherit; }
+.dark .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9); }
+.dark .leaflet-control-attribution { background: rgb(0 0 0 / 55%) !important; color: #cbd5e1; }
+.dark .leaflet-control-attribution a { color: #93c5fd; }
+
+@layer components {
+  .btn {
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-md px-4 text-sm font-medium whitespace-nowrap transition-colors disabled:pointer-events-none disabled:opacity-50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none;
+  }
+  .btn-primary { @apply bg-primary text-primary-foreground hover:bg-primary/90; }
+  .btn-secondary { @apply bg-secondary text-secondary-foreground hover:bg-secondary/80; }
+  .btn-ghost { @apply hover:bg-accent hover:text-accent-foreground; }
+  .btn-outline { @apply border border-input bg-transparent hover:bg-accent hover:text-accent-foreground; }
+  .btn-destructive { @apply bg-destructive text-white hover:bg-destructive/90; }
+  .btn-icon { @apply size-9 px-0; }
+  .btn-sm { @apply h-8 px-3 text-xs; }
+
+  .card { @apply rounded-xl border border-border bg-card text-card-foreground shadow-xs; }
+  .card-title { @apply text-sm font-semibold; }
+  .field-label { @apply text-xs text-muted-foreground; }
+
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-md border border-transparent px-2 py-0.5 text-xs font-medium whitespace-nowrap;
+  }
+  .badge-secondary { @apply bg-secondary text-secondary-foreground; }
+  .badge-outline { @apply border-border text-foreground; }
+  .badge-primary { @apply bg-primary/15 text-primary; }
+  .badge-accent { @apply bg-accent text-accent-foreground; }
+  .badge-success { @apply bg-success/15 text-success; }
+  .badge-warning { @apply bg-warning/20 text-foreground; }
+  .badge-destructive { @apply bg-destructive/15 text-destructive; }
+
+  .input {
+    @apply flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50 dark:bg-input/30;
+  }
+  .label { @apply text-sm leading-none font-medium; }
+  .menu-item {
+    @apply flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground [&_svg]:size-4;
+  }
+
+  .tabs { @apply inline-flex h-9 items-center rounded-lg bg-muted p-[3px] text-muted-foreground; }
+  .tab {
+    @apply inline-flex h-full items-center justify-center rounded-md px-3 text-sm font-medium whitespace-nowrap transition-colors hover:text-foreground;
+  }
+  .tab-active { @apply bg-background text-foreground shadow-sm dark:border dark:border-input dark:bg-input/30; }
+
+  .eyebrow { @apply text-xs font-semibold tracking-wider text-primary uppercase; }
+  .table { @apply w-full text-sm; }
+  .table th { @apply border-b border-border px-3 py-2 text-left text-xs font-semibold text-muted-foreground; }
+  .table td { @apply border-b border-border px-3 py-2.5; }
+  .table tbody tr:hover { @apply bg-muted/50; }
+  .page-title { @apply text-2xl font-semibold tracking-tight md:text-3xl; }
+}

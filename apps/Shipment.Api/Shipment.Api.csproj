@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- The one host of Shipment (ADR 0002): the Blazor front (Components/) calling the application services in process,
+       the REST API over the same services (Endpoints/) with OpenAPI and Scalar, sign-in and health checks. The rules
+       live in libs/Shipment.Domain and libs/Shipment.Application (ADR 0013), not here. -->
+  <PropertyGroup>
+    <!-- dotnet run locally: the connection string written by deploy/deploy.sh. -->
+    <UserSecretsId>shipment-api</UserSecretsId>
+    <!-- The SDK turns this on only when it sees .razor files at restore; the Dockerfile restores from the .csproj
+         alone, so without it the image has no _framework/blazor.web.js (found in the deploy, 2026-10-26). -->
+    <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
+    <!-- .NET 10 template default: NavigationManager.NavigateTo during static rendering does not throw. -->
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="JetBrains.Annotations" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Scalar.AspNetCore" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../libs/Shipment.Application/Shipment.Application.csproj" />
+    <ProjectReference Include="../../libs/Shipment.Observability.AspNetCore/Shipment.Observability.AspNetCore.csproj" />
+  </ItemGroup>
+
+  <!-- Tailwind CSS: rebuilds wwwroot/css/app.css (committed) when the styles or the markup change. Runs only where
+       `npm install` was done in this folder; images and CI use the committed file (SkipTailwind=true to force). -->
+  <ItemGroup>
+    <TailwindInput Include="Styles/app.css;Components/**/*.razor" />
+  </ItemGroup>
+  <Target Name="TailwindBuild" BeforeTargets="BeforeBuild"
+          Condition="'$(SkipTailwind)' != 'true' And Exists('node_modules/.bin/tailwindcss')"
+          Inputs="@(TailwindInput)" Outputs="wwwroot/css/app.css">
+    <Exec Command="npm run build:css --silent" />
+  </Target>
+
+  <Target Name="Husky" BeforeTargets="Restore;CollectPackageReferences" Condition="'$(HUSKY)' != 0" Inputs="../../.config/dotnet-tools.json" Outputs="../../.husky/_/install.stamp">
+    <Exec Command="dotnet tool restore" StandardOutputImportance="Low" StandardErrorImportance="High" />
+    <Exec Command="dotnet husky install" StandardOutputImportance="Low" StandardErrorImportance="High" WorkingDirectory="../.." />
+    <Touch Files="../../.husky/_/install.stamp" AlwaysCreate="true" Condition="Exists('../../.husky/_')" />
+    <ItemGroup>
+      <FileWrites Include="../../.husky/_/install.stamp" />
+    </ItemGroup>
+  </Target>
+</Project>

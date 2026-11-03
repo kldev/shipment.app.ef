@@ -1,0 +1,73 @@
+@page "/customers"
+@inject CrmService Crm
+@inject NavigationManager Navigation
+
+<PageTitle>Customers · Shipment</PageTitle>
+
+<PageHeader Eyebrow="Network" Title="Customers" Description="The people who order, and where they want it delivered.">
+    <Actions>
+        <button type="button" class="btn btn-primary" @onclick="() => _creating = true"><Icon Name="plus" /> New customer</button>
+    </Actions>
+</PageHeader>
+
+
+<div class="mb-4">
+    <label class="relative">
+        <Icon Name="search" Class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+        <input type="search" class="input w-72 pl-9" placeholder="Search name, e-mail or phone" @bind="_search" @bind:event="oninput" />
+    </label>
+</div>
+
+@if (_customers is null)
+{
+    <div class="h-40 animate-pulse rounded-xl bg-muted"></div>
+}
+else if (_customers is not null)
+{
+    <div class="card overflow-x-auto">
+        <table class="table">
+            <thead>
+                <tr><th>Customer</th><th>E-mail</th><th>Phone</th><th>City</th><th class="text-right">Addresses</th><th>Since</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var customer in Visible)
+                {
+                    <tr class="cursor-pointer" @onclick="@(() => Navigation.NavigateTo($"customers/{customer.Id}"))">
+                        <td>
+                            <a href="@($"customers/{customer.Id}")" class="flex items-center gap-3 font-medium hover:underline">
+                                <Avatar Name="@customer.DisplayName" Class="size-8 bg-accent text-xs text-accent-foreground" />
+                                @customer.DisplayName
+                            </a>
+                        </td>
+                        <td>@customer.Email</td>
+                        <td class="tabular-nums">@customer.Phone</td>
+                        <td>@customer.DefaultCity</td>
+                        <td class="text-right tabular-nums">@customer.AddressCount</td>
+                        <td class="text-muted-foreground">@Labels.DateTime(customer.CreatedAt)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@if (_creating)
+{
+    <CustomerEditor OnClose="() => _creating = false" OnSaved="@(id => Navigation.NavigateTo($"customers/{id}"))" />
+}
+
+@code {
+    private IReadOnlyList<CustomerRow>? _customers;
+    private string _search = "";
+    private bool _creating;
+
+    private IEnumerable<CustomerRow> Visible =>
+        (_customers ?? []).Where(c =>
+            _search == ""
+            || c.DisplayName.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || c.Email.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || (c.Phone ?? "").Contains(_search, StringComparison.OrdinalIgnoreCase)
+        );
+
+    protected override async Task OnInitializedAsync() => _customers = await Crm.ListCustomersAsync();
+}

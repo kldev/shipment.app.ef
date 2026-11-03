@@ -1,0 +1,94 @@
+@* Create or edit a courier. A car or a van needs its plate. *@
+@inject CarriersService Carriers
+
+<Modal Title="@(Courier is null ? "New courier" : "Edit courier")" OnClose="OnClose">
+    <form class="space-y-4" @onsubmit="SaveAsync" @onsubmit:preventDefault="true">
+        <ErrorAlert Message="@_error" />
+        <div class="space-y-2">
+            <label class="label" for="courier-name">Name</label>
+            <input id="courier-name" class="input" @bind="_name" required maxlength="200" />
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2">
+            <div class="space-y-2">
+                <label class="label" for="courier-phone">Phone</label>
+                <input id="courier-phone" type="tel" class="input" @bind="_phone" required maxlength="30" />
+            </div>
+            <div class="space-y-2">
+                <label class="label" for="courier-email">E-mail</label>
+                <input id="courier-email" type="email" class="input" @bind="_email" required maxlength="256" />
+            </div>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2">
+            <div class="space-y-2">
+                <label class="label" for="courier-vehicle">Vehicle</label>
+                <select id="courier-vehicle" class="input" @bind="_vehicle">
+                    @foreach (var type in VehicleTypes)
+                    {
+                        <option value="@type.Code">@type.Name - up to @Labels.Weight(type.MaxLoadG), size @type.MaxSizeClass</option>
+                    }
+                </select>
+            </div>
+            @if (_vehicle != VehicleType.Bike)
+            {
+                <div class="space-y-2">
+                    <label class="label" for="courier-plate">Registration plate</label>
+                    <input id="courier-plate" class="input font-mono uppercase" @bind="_plate" maxlength="15" placeholder="KR 12345" />
+                </div>
+            }
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+            <button type="button" class="btn btn-ghost" @onclick="OnClose">Cancel</button>
+            <button type="submit" class="btn btn-primary" disabled="@_saving">Save</button>
+        </div>
+    </form>
+</Modal>
+
+@code {
+    private readonly Guid _newId = Guid.CreateVersion7();
+    private string _name = "";
+    private string _phone = "";
+    private string _email = "";
+    private string _vehicle = VehicleType.Bike;
+    private string? _plate;
+    private bool _saving;
+    private string? _error;
+
+    [Parameter]
+    public CourierRow? Courier { get; set; }
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<VehicleTypeRow> VehicleTypes { get; set; } = [];
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    [Parameter]
+    public EventCallback OnSaved { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (Courier is null)
+            return;
+        _name = Courier.DisplayName;
+        _phone = Courier.Phone;
+        _email = Courier.Email;
+        _vehicle = Courier.VehicleType;
+        _plate = Courier.VehiclePlate;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _error = null;
+        var result = Courier is null
+            ? await Carriers.CreateCourierAsync(new CreateCourier(_newId, _name, _phone, _email, _vehicle, _plate))
+            : await Carriers.UpdateCourierAsync(
+                new UpdateCourier(Courier.Id, _name, _phone, _email, _vehicle, Courier.RowVersion, _plate)
+            );
+        _saving = false;
+        if (result.Error is { } error)
+            _error = error.Message;
+        else
+            await OnSaved.InvokeAsync();
+    }
+}

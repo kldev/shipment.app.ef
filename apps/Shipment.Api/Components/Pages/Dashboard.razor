@@ -1,0 +1,120 @@
+@page "/"
+@page "/dashboard"
+@inject CrmService Crm
+
+<PageTitle>Dashboard · Shipment</PageTitle>
+
+<PageHeader Eyebrow="Dashboard" Title="@($"Welcome, {Labels.FirstName(Me.DisplayName)}")"
+            Description="Food and parcel delivery for a city operator: partners hand orders over, couriers take them to customers." />
+
+@* The domain at a glance (docs/domain.md): one shipment, the bounded contexts around it, and its lifecycle. Static
+   until the modules exist - each card then shows its own numbers. *@
+<div class="grid gap-4 lg:grid-cols-3">
+    @foreach (var item in NavItems.Groups.SelectMany(g => g.Items).Where(i => i.Context is not null and not "platform"))
+    {
+        <a href="@item.Path" class="card group flex gap-4 p-5 transition-colors hover:border-primary/40">
+            <span class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+                <Icon Name="@item.Icon" Class="size-5" />
+            </span>
+            <span class="min-w-0">
+                <span class="block font-semibold">@item.Label</span>
+                <span class="mt-0.5 block text-xs text-muted-foreground">context: <span class="font-mono">@item.Context</span></span>
+                <span class="mt-2 block text-sm text-muted-foreground">@Purpose(item.Path)</span>
+            </span>
+        </a>
+    }
+</div>
+
+<div class="card mt-6 p-5">
+    <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+            <p class="card-title">The city</p>
+            <p class="text-sm text-muted-foreground">@_points pickup points of @_partners partners, @_addresses delivery addresses.</p>
+        </div>
+        <div class="flex items-center gap-4 text-xs text-muted-foreground">
+            <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-full bg-chart-1"></span> pickup point</span>
+            <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-full bg-chart-2"></span> customer</span>
+        </div>
+    </div>
+    
+    <Map Class="h-[28rem]" Label="Pickup points and customers" Markers="_markers" />
+</div>
+
+<div class="card mt-6 p-5">
+    <p class="card-title">Shipment lifecycle</p>
+    <p class="mt-1 text-sm text-muted-foreground">Each step is an event of the dispatch context; the others react to it.</p>
+    <ol class="mt-4 flex flex-wrap items-center gap-2 text-sm">
+        @foreach (var (step, index) in Lifecycle.Select((s, i) => (s, i)))
+        {
+            <li class="flex items-center gap-2">
+                <span class="rounded-lg border border-border bg-muted px-3 py-1.5 font-medium">@step</span>
+                @if (index < Lifecycle.Length - 1)
+                {
+                    <Icon Name="arrow-right" Class="size-4 text-muted-foreground" />
+                }
+            </li>
+        }
+    </ol>
+</div>
+
+@code {
+    [CascadingParameter]
+    private UserRow Me { get; set; } = null!;
+
+    private IReadOnlyList<MapMarker> _markers = [];
+    private int _points;
+    private int _partners;
+    private int _addresses;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var points = await Crm.ListPickupPointsAsync(status: PickupPointStatus.Active);
+        var addresses = await Crm.ListAddressesAsync(isDefault: true);
+        _points = points.Count;
+        _partners = points.Select(p => p.PartnerId).Distinct().Count();
+        _addresses = addresses.Count;
+        _markers =
+        [
+            .. points.Select(p => new MapMarker(
+                p.Latitude,
+                p.Longitude,
+                $"{p.PartnerName} - {p.Name}",
+                "pickup",
+                $"{p.PartnerName}\n{p.Name}, {p.AddressLine}"
+            )),
+            .. addresses.Select(a => new MapMarker(
+                a.Latitude,
+                a.Longitude,
+                a.CustomerName,
+                "customer",
+                $"{a.CustomerName}\n{a.AddressLine}"
+            )),
+        ];
+    }
+
+    private static readonly string[] Lifecycle =
+    [
+        "OrderPlaced",
+        "OrderAvailable",
+        "CourierAssigned",
+        "ArrivedAtPickup",
+        "PickedUp",
+        "ArrivedAtCustomer",
+        "Delivered",
+    ];
+
+    private static string Purpose(string path) =>
+        path switch
+        {
+            "orders" => "Orders placed for customers, with prices copied and the delivery fee.",
+            "picking" => "What the stores have to pack, and what was missing on the shelf.",
+            "shipments" => "The shipment and its lifecycle, from the order to the doorstep.",
+            "tracking" => "Where the courier is now, and when the order arrives.",
+            "couriers" => "Couriers, their vehicles (bike, car, van) and who is on shift.",
+            "partners" => "Stores and restaurants, their pickup points and catalogs.",
+            "customers" => "The people who order, and where they want it delivered.",
+            "compliance" => "Courier documents, age checks and what may be carried.",
+            "billing" => "Charges, refunds of missing items, commissions and payouts.",
+            _ => "",
+        };
+}

@@ -1,0 +1,67 @@
+@* Create or edit a customer. The e-mail is where the notifications go (MailPit locally). *@
+@inject CrmService Crm
+
+<Modal Title="@(Customer is null ? "New customer" : "Edit customer")" OnClose="OnClose">
+    <form class="space-y-4" @onsubmit="SaveAsync" @onsubmit:preventDefault="true">
+        <ErrorAlert Message="@_error" />
+        <div class="space-y-2">
+            <label class="label" for="customer-name">Name</label>
+            <input id="customer-name" class="input" @bind="_name" required maxlength="200" />
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2">
+            <div class="space-y-2">
+                <label class="label" for="customer-email">E-mail (notifications)</label>
+                <input id="customer-email" type="email" class="input" @bind="_email" required maxlength="256" />
+            </div>
+            <div class="space-y-2">
+                <label class="label" for="customer-phone">Phone</label>
+                <input id="customer-phone" type="tel" class="input" @bind="_phone" maxlength="30" />
+            </div>
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+            <button type="button" class="btn btn-ghost" @onclick="OnClose">Cancel</button>
+            <button type="submit" class="btn btn-primary" disabled="@_saving">Save</button>
+        </div>
+    </form>
+</Modal>
+
+@code {
+    private readonly Guid _newId = Guid.CreateVersion7();
+    private string _name = "";
+    private string _email = "";
+    private string? _phone;
+    private bool _saving;
+    private string? _error;
+
+    [Parameter]
+    public CustomerRow? Customer { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    [Parameter]
+    public EventCallback<Guid> OnSaved { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (Customer is null)
+            return;
+        _name = Customer.DisplayName;
+        _email = Customer.Email;
+        _phone = Customer.Phone;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _error = null;
+        var result = Customer is null
+            ? await Crm.CreateCustomerAsync(new CreateCustomer(_newId, _name, _email, _phone))
+            : await Crm.UpdateCustomerAsync(new UpdateCustomer(Customer.Id, _name, _email, _phone, Customer.RowVersion));
+        _saving = false;
+        if (result.Error is { } error)
+            _error = error.Message;
+        else
+            await OnSaved.InvokeAsync(Customer?.Id ?? _newId);
+    }
+}

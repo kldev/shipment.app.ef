@@ -1,0 +1,77 @@
+@* The "Billing" card of an order or a shipment (billing's own view - ADR 0010): what was authorized, charged and
+   refunded, what the customer paid, the partner's commission, the courier's payout and the operator's margin, with
+   the ledger's entries. Fails alone. *@
+@inject BillingService Billing
+
+<Card Title="Billing" Icon="receipt" Error="@_error">
+    @if (_billing is null)
+    {
+        <p class="text-muted-foreground">Nothing booked yet - the runner books the payment as the order moves.</p>
+    }
+    else
+    {
+        <dl class="grid grid-cols-2 gap-x-4 gap-y-1">
+            <dt class="text-muted-foreground">Authorized</dt><dd class="text-right tabular-nums">@Money(_billing.AuthorizedMinor)</dd>
+            <dt class="text-muted-foreground">Charged: goods</dt><dd class="text-right tabular-nums">@Money(_billing.CapturedGoodsMinor)</dd>
+            <dt class="text-muted-foreground">Charged: delivery fee</dt><dd class="text-right tabular-nums">@Money(_billing.CapturedFeeMinor)</dd>
+            @if (_billing.CapturedTipMinor > 0)
+            {
+                <dt class="text-muted-foreground">Charged: tip</dt><dd class="text-right tabular-nums">@Money(_billing.CapturedTipMinor)</dd>
+            }
+            <dt class="text-muted-foreground">Refunded</dt><dd class="@($"text-right tabular-nums {(_billing.RefundedMinor > 0 ? "text-warning" : "")}")">@Money(_billing.RefundedMinor)</dd>
+            <dt class="font-medium">Customer paid</dt><dd class="text-right font-medium tabular-nums">@Money(_billing.PaidMinor)</dd>
+            @if (_billing.CommissionMinor > 0 || _billing.PayoutMinor > 0)
+            {
+                <dt class="mt-2 text-muted-foreground">Commission</dt><dd class="mt-2 text-right tabular-nums">@Money(_billing.CommissionMinor)</dd>
+                <dt class="text-muted-foreground">Partner gets</dt><dd class="text-right tabular-nums">@Money(_billing.PartnerPayableMinor)</dd>
+                <dt class="text-muted-foreground">Courier payout</dt><dd class="text-right tabular-nums">@Money(_billing.PayoutMinor)</dd>
+                @if (_billing.TipMinor > 0)
+                {
+                    <dt class="text-muted-foreground">Tip to the courier</dt><dd class="text-right tabular-nums">@Money(_billing.TipMinor)</dd>
+                }
+                <dt class="font-medium">Operator margin</dt><dd class="text-right font-medium tabular-nums">@Money(_billing.MarginMinor)</dd>
+            }
+        </dl>
+        <details class="mt-2">
+            <summary class="cursor-pointer text-xs text-muted-foreground">@_entries.Count ledger entries</summary>
+            <ul class="mt-1 space-y-0.5 text-xs">
+                @foreach (var entry in _entries)
+                {
+                    <li class="flex justify-between gap-2">
+                        <span>@entry.Description</span>
+                        <span class="tabular-nums whitespace-nowrap">@Money(entry.AmountMinor)</span>
+                    </li>
+                }
+            </ul>
+        </details>
+    }
+</Card>
+
+@code {
+    private OrderBillingRow? _billing;
+    private IReadOnlyList<EntryRow> _entries = [];
+    private string? _error;
+
+    [Parameter, EditorRequired]
+    public Guid OrderId { get; set; }
+
+    /// <summary>The order's or the shipment's status from the page: a new one reloads the card (the runner books as it moves).</summary>
+    [Parameter]
+    public Enum? Status { get; set; }
+
+    private static string Money(long? minor) => Labels.Money(minor, LedgerEntry.Currency);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            _billing = await Billing.GetOrderBillingAsync(OrderId);
+            _entries = await Billing.ListEntriesAsync(new EntryFilter(OrderId: OrderId));
+            _error = null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _error = "Billing could not be loaded. Try again.";
+        }
+    }
+}

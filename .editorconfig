@@ -1,0 +1,27 @@
+root = true
+
+# Conventions of frameworks that JetBrains inspection cannot see - one glob per convention instead of an attribute on
+# every type (skill dotnet10-standard, 3a). Formatting belongs to CSharpier.
+
+# EF Core materializes the entities through their private constructors and sets their state through private setters
+# (and the database sets ids, xmin and defaults): "never used" / "can be get-only" would break the mapping.
+[libs/Shipment.Domain/**.cs]
+resharper_unused_member_local_highlighting = none
+resharper_unused_auto_property_accessor_local_highlighting = none
+resharper_unused_auto_property_accessor_global_highlighting = none
+resharper_auto_property_can_be_made_get_only_local_highlighting = none
+resharper_auto_property_can_be_made_get_only_global_highlighting = none
+
+# The rows and inputs of the application services: read by the Razor pages and serialized by the REST API.
+[libs/Shipment.Application/**.cs]
+resharper_not_accessed_positional_property_global_highlighting = none
+resharper_not_accessed_positional_property_local_highlighting = none
+
+# Endpoint groups are created by EndpointExtensions.MapEndpoints (reflection); their request records by the Minimal
+# API binder. The records stay internal - the tests send the same shapes.
+[apps/Shipment.Api/Endpoints/*Endpoints.cs]
+resharper_class_never_instantiated_global_highlighting = none
+resharper_unused_type_global_highlighting = none
+resharper_member_can_be_private_global_highlighting = none
+resharper_not_accessed_positional_property_global_highlighting = none
+resharper_not_accessed_positional_property_local_highlighting = none

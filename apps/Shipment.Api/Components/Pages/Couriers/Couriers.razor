@@ -1,0 +1,187 @@
+@page "/couriers"
+@inject CarriersService Carriers
+@inject ComplianceService Compliance
+@inject CrmService Crm
+
+<PageTitle>Couriers · Shipment</PageTitle>
+
+<PageHeader Eyebrow="Operations" Title="Couriers"
+            Description="Who delivers, on what, and where they are. Clearance comes from compliance; busy is set by dispatch.">
+    <Actions>
+        <button type="button" class="btn btn-primary" @onclick="() => { _editing = null; _editorOpen = true; }"><Icon Name="plus" /> New courier</button>
+    </Actions>
+</PageHeader>
+
+<ErrorAlert Message="@_error" />
+
+<div class="mb-4 flex flex-wrap items-center gap-2">
+    @foreach (var (value, name) in Statuses)
+    {
+        <button type="button" class="@($"btn btn-sm {(_status == value ? "btn-secondary" : "btn-ghost")}")" @onclick="() => _status = value">
+            @name <span class="text-muted-foreground tabular-nums">@Count(value)</span>
+        </button>
+    }
+    <span class="mx-2 h-5 w-px bg-border"></span>
+    @foreach (var type in _vehicleTypes)
+    {
+        <button type="button" class="@($"btn btn-sm {(_vehicle == type.Code ? "btn-secondary" : "btn-ghost")}")"
+                @onclick="() => _vehicle = _vehicle == type.Code ? null : type.Code">
+            <Icon Name="@Labels.VehicleIcon(type.Code)" /> @type.Name
+        </button>
+    }
+</div>
+
+<div class="grid gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+    <div class="card overflow-x-auto">
+        <table class="table">
+            <thead>
+                <tr><th>Courier</th><th>Vehicle</th><th>Shift</th><th>Clearance</th><th>Position</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var courier in Visible)
+                {
+                    var clearance = _clearance.GetValueOrDefault(courier.Id);
+                    <tr>
+                        <td>
+                            <p class="font-medium">@courier.DisplayName</p>
+                            <p class="text-xs text-muted-foreground">@courier.Phone</p>
+                        </td>
+                        <td>
+                            <span class="inline-flex items-center gap-1.5"><Icon Name="@Labels.VehicleIcon(courier.VehicleType)" /> @courier.VehicleName</span>
+                            @if (courier.VehiclePlate is not null)
+                            {
+                                <span class="ml-1 font-mono text-xs text-muted-foreground">@courier.VehiclePlate</span>
+                            }
+                        </td>
+                        <td><ShiftBadge Status="@courier.ShiftStatus" /></td>
+                        <td>
+                            @if (clearance is null)
+                            {
+                                <span class="text-xs text-muted-foreground">–</span>
+                            }
+                            else if (clearance.Cleared)
+                            {
+                                <span class="badge badge-success">cleared</span>
+                                @if (clearance.ExpiringSoon)
+                                {
+                                    <span class="badge badge-warning ml-1">expiring</span>
+                                }
+                            }
+                            else
+                            {
+                                <a href="compliance" class="badge badge-destructive" title="@string.Join(", ", clearance.Reasons)">not cleared</a>
+                            }
+                        </td>
+                        <td class="text-xs text-muted-foreground">
+                            @(courier.PositionAgeMinutes is { } age ? age < 1 ? "just now" : $"{age} min ago" : "unknown")
+                        </td>
+                        <td class="text-right whitespace-nowrap">
+                            @if (courier.ShiftStatus == ShiftStatus.Offline)
+                            {
+                                <button type="button" class="btn btn-outline btn-sm" @onclick="() => ShiftAsync(courier, start: true)">Start shift</button>
+                            }
+                            else
+                            {
+                                <button type="button" class="btn btn-ghost btn-sm" disabled="@(courier.ShiftStatus == ShiftStatus.Busy)"
+                                        title="@(courier.ShiftStatus == ShiftStatus.Busy ? "Delivering an order" : null)"
+                                        @onclick="() => ShiftAsync(courier, start: false)">End shift</button>
+                            }
+                            <button type="button" class="btn btn-ghost btn-icon" aria-label="Move @courier.DisplayName" @onclick="() => _moving = courier">
+                                <Icon Name="navigation" />
+                            </button>
+                            <button type="button" class="btn btn-ghost btn-icon" aria-label="Edit @courier.DisplayName"
+                                    @onclick="() => { _editing = courier; _editorOpen = true; }">
+                                <Icon Name="pencil" />
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="space-y-2">
+        <Map Class="h-[32rem]" Label="Couriers on shift" Markers="_markers" />
+        <p class="flex items-center gap-4 text-xs text-muted-foreground">
+            <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-full bg-success"></span> on shift</span>
+            <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-full bg-chart-1"></span> pickup point</span>
+        </p>
+    </div>
+</div>
+
+@if (_editorOpen)
+{
+    <CourierEditor Courier="_editing" VehicleTypes="_vehicleTypes" OnClose="() => _editorOpen = false" OnSaved="SavedAsync" />
+}
+@if (_moving is not null)
+{
+    <PositionEditor Courier="_moving" OnClose="() => _moving = null" OnSaved="SavedAsync" />
+}
+
+@code {
+    private static readonly (ShiftStatus? Value, string Name)[] Statuses =
+    [
+        (null, "All"),
+        (ShiftStatus.Available, "Available"),
+        (ShiftStatus.Busy, "Busy"),
+        (ShiftStatus.Offline, "Off shift"),
+    ];
+
+    private List<CourierRow> _couriers = [];
+    private IReadOnlyList<VehicleTypeRow> _vehicleTypes = [];
+    private Dictionary<Guid, ClearanceRow> _clearance = [];
+    private IReadOnlyList<MapMarker> _markers = [];
+    private ShiftStatus? _status;
+    private string? _vehicle;
+    private string? _error;
+    private bool _editorOpen;
+    private CourierRow? _editing;
+    private CourierRow? _moving;
+
+    private IEnumerable<CourierRow> Visible =>
+        _couriers.Where(c => (_status is null || c.ShiftStatus == _status) && (_vehicle is null || c.VehicleType == _vehicle));
+
+    private int Count(ShiftStatus? status) => _couriers.Count(c => status is null || c.ShiftStatus == status);
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _vehicleTypes = await Carriers.ListVehicleTypesAsync();
+        _couriers = (await Carriers.ListCouriersAsync())
+            .OrderBy(c => c.ShiftStatus == ShiftStatus.Offline)
+            .ThenBy(c => c.DisplayName)
+            .ToList();
+        // Query composition (ADR 0010): the clearance is compliance's.
+        _clearance = (await Compliance.ListClearanceAsync()).ToDictionary(c => c.CourierId);
+        var points = await Crm.ListPickupPointsAsync(status: PickupPointStatus.Active);
+        _markers =
+        [
+            .. points.Select(p => new MapMarker(p.Latitude, p.Longitude, $"{p.PartnerName} - {p.Name}")),
+            .. _couriers
+                .Where(c => c is { LastLatitude: not null, LastLongitude: not null } && c.ShiftStatus != ShiftStatus.Offline)
+                .Select(c => new MapMarker(
+                    c.LastLatitude!.Value,
+                    c.LastLongitude!.Value,
+                    $"{c.DisplayName} ({c.VehicleName})",
+                    "courier",
+                    $"{c.DisplayName}\n{c.VehicleName} · {Labels.Wire(c.ShiftStatus)}"
+                )),
+        ];
+    }
+
+    private async Task SavedAsync()
+    {
+        _editorOpen = false;
+        _moving = null;
+        await LoadAsync();
+    }
+
+    private async Task ShiftAsync(CourierRow courier, bool start)
+    {
+        _error = null;
+        var command = new ChangeShift(courier.Id, courier.RowVersion);
+        var result = start ? await Carriers.StartShiftAsync(command) : await Carriers.EndShiftAsync(command);
+        _error = result.Error?.Message;
+        await LoadAsync();
+    }
+}

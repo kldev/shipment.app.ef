@@ -1,0 +1,152 @@
+@page "/tracking"
+@implements IAsyncDisposable
+@inject TrackingService Tracking
+
+@* Every shipment on its way on one map, refreshed by a timer (no push from the database): couriers where their last
+   position is, the legs still ahead, late ones first in the list. *@
+
+<PageTitle>Live tracking · Shipment</PageTitle>
+
+<PageHeader Eyebrow="Operations" Title="Live tracking"
+            Description="Shipments on their way: where the courier is, what is left and when it arrives. Refreshes every few seconds.">
+    <Actions>
+        <span class="text-xs text-muted-foreground">Updated @Labels.Time(_updated)</span>
+    </Actions>
+</PageHeader>
+
+<ErrorAlert Message="@_error" />
+
+<div class="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+    <div class="space-y-2">
+        @if (_loaded && _moving.Count == 0)
+        {
+            <EmptyState IconName="map" Title="Nobody on the way" Description="Assign a courier on Shipments; the route appears here." />
+        }
+        @foreach (var shipment in _moving)
+        {
+            <a href="@($"shipments/{shipment.ShipmentId}")"
+               class="@($"card flex items-center gap-3 p-3 transition-colors hover:border-primary/40 {(_selected == shipment.ShipmentId ? "border-primary" : "")}")"
+               @onmouseover="() => _selected = shipment.ShipmentId">
+                <Icon Name="@Labels.VehicleIcon(shipment.VehicleType)" Class="size-5 shrink-0 text-success" />
+                <span class="min-w-0 flex-1">
+                    <span class="flex items-center gap-2">
+                        <span class="font-mono font-medium">@shipment.Code</span>
+                        <ShipmentStatusBadge Status="@shipment.Status" />
+                        @if (shipment.Simulated)
+                        {
+                            <span class="badge badge-outline">simulated</span>
+                        }
+                    </span>
+                    <span class="block truncate text-xs text-muted-foreground">
+                        @shipment.CourierName → @(shipment.NextStop == NextStop.Pickup ? shipment.PickupPointName : shipment.DropoffAddressLine)
+                    </span>
+                </span>
+                <span class="text-right text-sm whitespace-nowrap tabular-nums">
+                    @Labels.Distance(shipment.RemainingM)
+                    <span class="@($"block text-xs {(shipment.Late ? "font-semibold text-destructive" : "text-muted-foreground")}")">
+                        ETA @Labels.Time(shipment.EtaAt)
+                    </span>
+                </span>
+            </a>
+        }
+    </div>
+    <div class="space-y-2">
+        <Map Class="h-[36rem]" Label="Shipments on their way" Markers="_markers" Lines="_lines" />
+        <p class="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+            <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-full bg-success"></span> courier</span>
+            <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-full bg-chart-1"></span> pickup point</span>
+            <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-full bg-chart-2"></span> customer</span>
+        </p>
+    </div>
+</div>
+
+@code {
+    private static readonly TimeSpan RefreshEvery = TimeSpan.FromSeconds(5);
+
+    private static readonly ShipmentStatus[] OnTheWay =
+    [
+        ShipmentStatus.CourierAssigned,
+        ShipmentStatus.ArrivedAtPickup,
+        ShipmentStatus.PickedUp,
+        ShipmentStatus.ArrivedAtCustomer,
+    ];
+
+    private readonly CancellationTokenSource _stop = new();
+    private List<TrackingRow> _moving = [];
+    private IReadOnlyList<MapMarker> _markers = [];
+    private IReadOnlyList<MapLine> _lines = [];
+    private Guid? _selected;
+    private DateTimeOffset _updated;
+    private string? _error;
+    private bool _loaded;
+    private Task? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        _timer = RefreshAsync(_stop.Token);
+    }
+
+    private async Task RefreshAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(RefreshEvery);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct))
+                await InvokeAsync(async () =>
+                {
+                    await LoadAsync();
+                    StateHasChanged();
+                });
+        }
+        catch (OperationCanceledException)
+        {
+            // The page is gone.
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            var all = await Tracking.ListTrackingAsync();
+            _moving = all.Where(t => OnTheWay.Contains(t.Status)).OrderByDescending(t => t.Late).ThenBy(t => t.EtaAt).ToList();
+            _markers =
+            [
+                .. _moving.Select(t => new MapMarker(t.PickupLatitude, t.PickupLongitude, $"{t.Code}: {t.PartnerName}")),
+                .. _moving.Select(t => new MapMarker(t.DropoffLatitude, t.DropoffLongitude, $"{t.Code}: {t.CustomerName}", "customer")),
+                .. _moving
+                    .Where(t => t is { Latitude: not null, Longitude: not null })
+                    .Select(t => new MapMarker(
+                        t.Latitude!.Value,
+                        t.Longitude!.Value,
+                        $"{t.Code}: {t.CourierName}",
+                        "courier",
+                        $"{t.CourierName} · {t.Code}\n{Labels.Distance(t.RemainingM)} left, ETA {Labels.Time(t.EtaAt)}"
+                    )),
+            ];
+            // The legs still ahead: to the pickup point only before the goods are picked up.
+            _lines = _moving
+                .SelectMany(t =>
+                    t.Status is ShipmentStatus.CourierAssigned ? new[] { t.ToPickup, t.ToCustomer } : new[] { t.ToCustomer }
+                )
+                .Select(l => new MapLine(GeoJson.Points(l)))
+                .ToList();
+            _updated = DateTimeOffset.UtcNow;
+            _loaded = true;
+            _error = null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _error = "The map could not be refreshed. It tries again in a moment.";
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _stop.CancelAsync();
+        if (_timer is not null)
+            await _timer;
+        _stop.Dispose();
+    }
+}

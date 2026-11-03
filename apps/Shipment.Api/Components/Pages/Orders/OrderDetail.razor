@@ -1,0 +1,247 @@
+@page "/orders/{Id:guid}"
+@inject OrderingService Ordering
+@inject DispatchService Dispatch
+
+<PageTitle>@(_order?.Code ?? "Order") · Shipment</PageTitle>
+
+<a href="orders" class="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+    <Icon Name="arrow-left" /> Back to orders
+</a>
+
+<ErrorAlert Message="@_error" />
+
+@if (_order is null)
+{
+    @if (_error is null)
+    {
+        <div class="h-40 animate-pulse rounded-xl bg-muted"></div>
+    }
+}
+else
+{
+    <header class="mb-5 flex flex-wrap items-start justify-between gap-4">
+        <div>
+            <p class="eyebrow">Order</p>
+            <h1 class="page-title flex items-center gap-3"><span class="font-mono">@_order.Code</span> <OrderStatusBadge Status="@_order.Status" /></h1>
+            <p class="text-sm text-muted-foreground">@_order.CustomerName · from @_order.PartnerName, @_order.PickupPointName</p>
+            @if (_shipment is not null)
+            {
+                <p class="mt-1 text-sm">
+                    Shipment <a href="@($"shipments/{_shipment.Id}")" class="font-mono font-medium hover:underline">@_shipment.Code</a>
+                    <ShipmentStatusBadge Status="@_shipment.Status" />
+                </p>
+            }
+        </div>
+        <div class="flex gap-2">
+            @if (_order.Status is OrderStatus.Placed or OrderStatus.Picking)
+            {
+                <a href="@($"picking/{Id}")" class="btn btn-outline"><Icon Name="package-check" /> Pick</a>
+            }
+            @if (_order.Status == OrderStatus.Placed)
+            {
+                <button type="button" class="btn btn-ghost text-destructive" @onclick="() => _cancelling = true"><Icon Name="ban" /> Cancel order</button>
+            }
+        </div>
+    </header>
+
+    <section class="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <div class="space-y-4">
+            <div class="card overflow-x-auto">
+                <table class="table">
+                    <thead>
+                        <tr><th>Product</th><th class="text-right">Price</th><th class="text-right">Ordered</th><th class="text-right">Packed</th><th class="text-right">Value</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var line in _lines)
+                        {
+                            <tr>
+                                <td>
+                                    <p class="font-medium">
+                                        @line.Name
+                                        @if (line.AgeRestricted)
+                                        {
+                                            <span class="badge badge-outline ml-1">18+</span>
+                                        }
+                                    </p>
+                                    <p class="font-mono text-xs text-muted-foreground">@line.Sku · @Labels.Weight(line.WeightG) · @line.SizeClass</p>
+                                </td>
+                                <td class="text-right tabular-nums">@Labels.Money(line.UnitPriceMinor, _order.Currency)</td>
+                                <td class="text-right tabular-nums">@line.Quantity</td>
+                                <td class="text-right tabular-nums">
+                                    @if (line.PickedQuantity is null)
+                                    {
+                                        <span class="text-muted-foreground">–</span>
+                                    }
+                                    else
+                                    {
+                                        @line.PickedQuantity
+                                        @if (line.MissingQuantity > 0)
+                                        {
+                                            <span class="badge badge-warning ml-1">@line.MissingQuantity missing</span>
+                                        }
+                                    }
+                                </td>
+                                <td class="text-right tabular-nums">@Labels.Money(line.LineTotalMinor, _order.Currency)</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot class="text-sm">
+                        <tr>
+                            <td colspan="4" class="text-right text-muted-foreground">Goods @(_order.GoodsPickedMinor is null ? "as ordered" : "as packed")</td>
+                            <td class="text-right tabular-nums">@Labels.Money(_order.GoodsPickedMinor ?? _order.GoodsOrderedMinor, _order.Currency)</td>
+                        </tr>
+                        @if (_order.GoodsPickedMinor is { } picked && picked != _order.GoodsOrderedMinor)
+                        {
+                            <tr>
+                                <td colspan="4" class="text-right text-muted-foreground">Not charged (missing)</td>
+                                <td class="text-right text-warning tabular-nums">−@Labels.Money(_order.GoodsOrderedMinor - picked, _order.Currency)</td>
+                            </tr>
+                        }
+                        <tr>
+                            <td colspan="4" class="text-right text-muted-foreground">Delivery fee (@Labels.Distance(_order.DistanceM))</td>
+                            <td class="text-right tabular-nums">@Labels.Money(_order.DeliveryFeeMinor, _order.Currency)</td>
+                        </tr>
+                        @if (_order.TipMinor > 0)
+                        {
+                            <tr>
+                                <td colspan="4" class="text-right text-muted-foreground">Tip for the courier (@_order.TipPercent %)</td>
+                                <td class="text-right tabular-nums">@Labels.Money(_order.TipMinor, _order.Currency)</td>
+                            </tr>
+                        }
+                        <tr class="font-semibold">
+                            <td colspan="4" class="text-right">Total</td>
+                            <td class="text-right tabular-nums">@Labels.Money(_order.TotalMinor, _order.Currency)</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            <div class="card p-4">
+                <p class="card-title mb-3">Timeline</p>
+                <ol class="space-y-2 text-sm">
+                    @foreach (var (name, at) in Timeline)
+                    {
+                        <li class="flex items-center gap-3">
+                            <span class="@($"size-2.5 rounded-full {(at is null ? "bg-muted" : "bg-primary")}")"></span>
+                            <span class="w-28 font-medium">@name</span>
+                            <span class="text-muted-foreground">@(at is null ? "–" : Labels.DateTime(at))</span>
+                        </li>
+                    }
+                </ol>
+                @if ((_order.CancelReason ?? _order.FailureReason) is { } reason)
+                {
+                    <p class="mt-3 text-sm"><span class="text-muted-foreground">Reason:</span> @reason</p>
+                }
+            </div>
+        </div>
+
+        <div class="space-y-4">
+            <div class="card space-y-3 p-4 text-sm">
+                <div>
+                    <p class="card-title mb-1">Deliver to</p>
+                    <p class="font-medium">@_order.AddressLabel</p>
+                    <p class="text-muted-foreground">@_order.AddressLine, @_order.AddressPostcode @_order.AddressCity</p>
+                    @if (_order.AddressNotes is not null)
+                    {
+                        <p class="text-xs text-muted-foreground italic">@_order.AddressNotes</p>
+                    }
+                </div>
+                <div>
+                    <p class="card-title mb-1">Pick up at</p>
+                    <p class="font-medium">@_order.PartnerName - @_order.PickupPointName</p>
+                    <p class="text-muted-foreground">@_order.PickupAddressLine</p>
+                </div>
+                <p class="flex flex-wrap gap-x-4 text-muted-foreground">
+                    <span class="inline-flex items-center gap-1.5"><Icon Name="weight" /> @Labels.Weight(_order.WeightG)</span>
+                    <span class="inline-flex items-center gap-1.5"><Icon Name="ruler" /> largest @(_order.LargestSizeClass?.ToString() ?? "–")</span>
+                    @if (_order.AgeRestricted)
+                    {
+                        <span class="inline-flex items-center gap-1.5 text-warning"><Icon Name="id-card" /> ID check on delivery</span>
+                    }
+                </p>
+            </div>
+            <Map Class="h-80" Label="Pickup point and delivery address" Markers="_markers" />
+            <BillingCard OrderId="Id" Status="_order.Status" />
+        </div>
+    </section>
+}
+
+@if (_cancelling && _order is not null)
+{
+    <Modal Title="@($"Cancel {_order.Code}")" Description="The store has not started packing. The customer is told the reason." OnClose="() => _cancelling = false">
+        <form class="space-y-4" @onsubmit="CancelAsync" @onsubmit:preventDefault="true">
+            <ErrorAlert Message="@_cancelError" />
+            <div class="space-y-2">
+                <label class="label" for="cancel-reason">Reason</label>
+                <input id="cancel-reason" class="input" @bind="_reason" required maxlength="500" placeholder="The customer called to cancel" />
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" class="btn btn-ghost" @onclick="() => _cancelling = false">Keep the order</button>
+                <button type="submit" class="btn btn-destructive" disabled="@_saving">Cancel order</button>
+            </div>
+        </form>
+    </Modal>
+}
+
+@code {
+    private OrderRow? _order;
+    private IReadOnlyList<OrderLineRow> _lines = [];
+    private ShipmentRow? _shipment;
+    private IReadOnlyList<MapMarker> _markers = [];
+    private string? _error;
+    private bool _cancelling;
+    private string _reason = "";
+    private string? _cancelError;
+    private bool _saving;
+
+    [Parameter]
+    public Guid Id { get; set; }
+
+    private IEnumerable<(string Name, DateTimeOffset? At)> Timeline =>
+        _order is null
+            ? []
+            : _order.Status == OrderStatus.Cancelled
+                ? [("Placed", _order.PlacedAt), ("Picking", _order.PickingStartedAt), ("Cancelled", _order.CancelledAt)]
+                :
+                [
+                    ("Placed", _order.PlacedAt),
+                    ("Picking", _order.PickingStartedAt),
+                    ("Ready", _order.ReadyAt),
+                    (_order.Status == OrderStatus.Failed ? "Failed" : "Delivered", _order.FailedAt ?? _order.DeliveredAt),
+                ];
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _order = await Ordering.GetOrderAsync(Id);
+        if (_order is null)
+        {
+            _error = "Order not found.";
+            return;
+        }
+        _lines = await Ordering.ListLinesAsync(Id);
+        // The shipment is dispatch's (ADR 0010).
+        _shipment = (await Dispatch.ListShipmentsAsync(new ShipmentFilter(OrderId: Id))).FirstOrDefault();
+        _markers =
+        [
+            new MapMarker(_order.PickupLatitude, _order.PickupLongitude, $"{_order.PartnerName} - {_order.PickupPointName}"),
+            new MapMarker(_order.AddressLatitude, _order.AddressLongitude, $"{_order.CustomerName} - {_order.AddressLabel}", "customer"),
+        ];
+    }
+
+    private async Task CancelAsync()
+    {
+        _saving = true;
+        _cancelError = null;
+        var result = await Ordering.CancelAsync(new CancelOrder(Id, _reason, _order!.RowVersion));
+        _saving = false;
+        if (result.Error is { } error)
+        {
+            _cancelError = error.Message;
+            return;
+        }
+        _cancelling = false;
+        await LoadAsync();
+    }
+}

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The rules of Shipment's bounded contexts (ADR 0013): entities, their states and transitions, values. No EF Core,
+       no ASP.NET Core - the persistence maps these classes, the application layer drives them. -->
+  <ItemGroup>
+    <PackageReference Include="JetBrains.Annotations" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Shipment.Geo/Shipment.Geo.csproj" />
+  </ItemGroup>
+</Project>

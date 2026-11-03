@@ -1,0 +1,6 @@
+{% for line in Lines %}  {{ line.Quantity }} x {{ line.Name }} - {{ line.Amount }}
+{% endfor %}
+Goods: {{ Goods }}
+Delivery fee: {{ DeliveryFee }}
+{% if HasTip %}Tip for the courier: {{ Tip }}
+{% endif %}Total: {{ Total }}

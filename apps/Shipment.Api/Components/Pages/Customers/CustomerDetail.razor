@@ -1,0 +1,122 @@
+@page "/customers/{Id:guid}"
+@inject CrmService Crm
+
+<PageTitle>@(_customer?.DisplayName ?? "Customer") · Shipment</PageTitle>
+
+<a href="customers" class="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+    <Icon Name="arrow-left" /> Back to customers
+</a>
+
+<ErrorAlert Message="@_error" />
+
+@if (_customer is null)
+{
+    @if (_error is null)
+    {
+        <div class="h-40 animate-pulse rounded-xl bg-muted"></div>
+    }
+}
+else
+{
+    <header class="mb-5 flex flex-wrap items-start justify-between gap-4">
+        <div class="flex items-center gap-4">
+            <Avatar Name="@_customer.DisplayName" Class="size-12 bg-accent text-accent-foreground" />
+            <div>
+                <h1 class="page-title">@_customer.DisplayName</h1>
+                <p class="flex flex-wrap items-center gap-x-4 text-sm text-muted-foreground">
+                    <span class="inline-flex items-center gap-1.5"><Icon Name="mail" /> @_customer.Email</span>
+                    @if (_customer.Phone is not null)
+                    {
+                        <span class="inline-flex items-center gap-1.5"><Icon Name="phone" /> @_customer.Phone</span>
+                    }
+                </p>
+            </div>
+        </div>
+        <button type="button" class="btn btn-outline" @onclick="() => _editing = true"><Icon Name="pencil" /> Edit customer</button>
+    </header>
+
+    <section class="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <div class="card p-4">
+            <div class="mb-3 flex items-center justify-between">
+                <p class="card-title">Delivery addresses</p>
+                <button type="button" class="btn btn-ghost btn-sm" @onclick="() => { _addressEditing = null; _addressOpen = true; }">
+                    <Icon Name="plus" /> Add
+                </button>
+            </div>
+            @if (_addresses is { Count: 0 })
+            {
+                <p class="text-sm text-muted-foreground">No address yet - an order needs one.</p>
+            }
+            <ul class="divide-y divide-border">
+                @foreach (var address in _addresses ?? [])
+                {
+                    <li class="flex items-start justify-between gap-3 py-3">
+                        <div class="min-w-0">
+                            <p class="flex items-center gap-2 font-medium">
+                                <Icon Name="map-pin" Class="size-4 text-chart-2" /> @address.Label
+                                @if (address.IsDefault)
+                                {
+                                    <span class="badge badge-primary">default</span>
+                                }
+                            </p>
+                            <p class="text-sm text-muted-foreground">@address.AddressLine, @address.Postcode @address.City</p>
+                            @if (address.Notes is not null)
+                            {
+                                <p class="text-xs text-muted-foreground italic">@address.Notes</p>
+                            }
+                        </div>
+                        <button type="button" class="btn btn-ghost btn-icon" aria-label="Edit @address.Label"
+                                @onclick="() => { _addressEditing = address; _addressOpen = true; }">
+                            <Icon Name="pencil" />
+                        </button>
+                    </li>
+                }
+            </ul>
+        </div>
+        <Map Class="h-80 lg:h-full lg:min-h-80" Label="Delivery addresses of the customer" Markers="_markers" />
+    </section>
+}
+
+@if (_editing && _customer is not null)
+{
+    <CustomerEditor Customer="_customer" OnClose="() => _editing = false" OnSaved="_ => SavedAsync()" />
+}
+@if (_addressOpen)
+{
+    <AddressEditor CustomerId="Id" Address="_addressEditing" OnClose="() => _addressOpen = false" OnSaved="SavedAsync" />
+}
+
+@code {
+    private CustomerRow? _customer;
+    private IReadOnlyList<CustomerAddressRow>? _addresses;
+    private IReadOnlyList<MapMarker> _markers = [];
+    private string? _error;
+    private bool _editing;
+    private bool _addressOpen;
+    private CustomerAddressRow? _addressEditing;
+
+    [Parameter]
+    public Guid Id { get; set; }
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _customer = await Crm.GetCustomerAsync(Id);
+        if (_customer is null)
+        {
+            _error = "Customer not found.";
+            return;
+        }
+        _addresses = await Crm.ListAddressesAsync(Id);
+        _markers = _addresses
+            .Select(a => new MapMarker(a.Latitude, a.Longitude, a.Label, "customer", $"{a.Label}\n{a.AddressLine}"))
+            .ToList();
+    }
+
+    private async Task SavedAsync()
+    {
+        _editing = _addressOpen = false;
+        await LoadAsync();
+    }
+}

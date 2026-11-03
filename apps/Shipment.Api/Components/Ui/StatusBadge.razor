@@ -1,0 +1,17 @@
+@* active / paused / closed / inactive as a coloured badge. *@
+<span class="@($"badge {Style}")">@Name</span>
+
+@code {
+    [Parameter]
+    public Enum? Status { get; set; }
+
+    private string Name => Status is null ? "" : Labels.Wire(Status);
+
+    private string Style =>
+        Name switch
+        {
+            "active" => "badge-success",
+            "paused" => "badge-warning",
+            _ => "badge-secondary",
+        };
+}

@@ -1,0 +1,148 @@
+@* Create or edit a pickup point; the place is picked by a click on the map (or typed). The id of a new one is made
+   here (ADR 0009). *@
+@inject CrmService Crm
+
+<Modal Title="@(Point is null ? "New pickup point" : "Edit pickup point")" Wide="true" OnClose="OnClose">
+    <form class="grid gap-5 lg:grid-cols-2" @onsubmit="SaveAsync" @onsubmit:preventDefault="true">
+        <div class="space-y-4">
+            <ErrorAlert Message="@_error" />
+            <div class="space-y-2">
+                <label class="label" for="point-name">Name</label>
+                <input id="point-name" class="input" @bind="_name" required maxlength="200" placeholder="Old Town" />
+            </div>
+            <div class="space-y-2">
+                <label class="label" for="point-street">Street and number</label>
+                <input id="point-street" class="input" @bind="_addressLine" required maxlength="200" />
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div class="space-y-2">
+                    <label class="label" for="point-postcode">Postcode</label>
+                    <input id="point-postcode" class="input" @bind="_postcode" required maxlength="10" />
+                </div>
+                <div class="space-y-2">
+                    <label class="label" for="point-city">City</label>
+                    <input id="point-city" class="input" @bind="_city" required maxlength="100" />
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div class="space-y-2">
+                    <label class="label" for="point-opens">Opens</label>
+                    <input id="point-opens" type="time" class="input" @bind="_opens" />
+                </div>
+                <div class="space-y-2">
+                    <label class="label" for="point-closes">Closes</label>
+                    <input id="point-closes" type="time" class="input" @bind="_closes" />
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div class="space-y-2">
+                    <label class="label" for="point-lat">Latitude</label>
+                    <input id="point-lat" type="number" step="0.000001" class="input font-mono" @bind="_latitude" />
+                </div>
+                <div class="space-y-2">
+                    <label class="label" for="point-lng">Longitude</label>
+                    <input id="point-lng" type="number" step="0.000001" class="input font-mono" @bind="_longitude" />
+                </div>
+            </div>
+            @if (Point is not null)
+            {
+                <label class="flex items-center gap-2 text-sm">
+                    <input type="checkbox" @bind="_closed" /> Closed - takes no new orders
+                </label>
+            }
+        </div>
+        <div class="space-y-2">
+            <p class="text-sm text-muted-foreground">Click the map where the courier picks orders up.</p>
+            <Map Class="h-80 lg:h-full lg:min-h-96" Label="Pick the pickup point" Picking="true"
+                 PickedLatitude="_latitude" PickedLongitude="_longitude" OnPick="Pick" />
+        </div>
+        <div class="flex justify-end gap-2 lg:col-span-2">
+            <button type="button" class="btn btn-ghost" @onclick="OnClose">Cancel</button>
+            <button type="submit" class="btn btn-primary" disabled="@_saving">Save</button>
+        </div>
+    </form>
+</Modal>
+
+@code {
+    private readonly Guid _newId = Guid.CreateVersion7();
+    private string _name = "";
+    private string _addressLine = "";
+    private string _postcode = "";
+    private string _city = "Kraków";
+    private TimeOnly _opens = new(8, 0);
+    private TimeOnly _closes = new(22, 0);
+    private decimal? _latitude;
+    private decimal? _longitude;
+    private bool _closed;
+    private bool _saving;
+    private string? _error;
+
+    [Parameter, EditorRequired]
+    public Guid PartnerId { get; set; }
+
+    /// <summary>The point to edit; null = a new one.</summary>
+    [Parameter]
+    public PickupPointRow? Point { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    [Parameter]
+    public EventCallback OnSaved { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (Point is null)
+            return;
+        _name = Point.Name;
+        _addressLine = Point.AddressLine;
+        _postcode = Point.Postcode;
+        _city = Point.City;
+        _opens = Labels.ToTime(Point.OpensMinute);
+        _closes = Labels.ToTime(Point.ClosesMinute);
+        _latitude = Point.Latitude;
+        _longitude = Point.Longitude;
+        _closed = Point.Status == PickupPointStatus.Closed;
+    }
+
+    private void Pick((decimal Latitude, decimal Longitude) place) =>
+        (_latitude, _longitude) = (place.Latitude, place.Longitude);
+
+    private async Task SaveAsync()
+    {
+        _error = null;
+        if (_latitude is not { } latitude || _longitude is not { } longitude)
+        {
+            _error = "Pick the place on the map: latitude -90..90, longitude -180..180.";
+            return;
+        }
+        _saving = true;
+        // 23:59 in the form means "until midnight".
+        var closes = _closes == new TimeOnly(23, 59) ? 1440 : Labels.FromTime(_closes);
+        var opens = Labels.FromTime(_opens);
+        var result = Point is null
+            ? await Crm.CreatePickupPointAsync(
+                new CreatePickupPoint(_newId, PartnerId, _name, _addressLine, _city, _postcode, latitude, longitude, opens, closes)
+            )
+            : await Crm.UpdatePickupPointAsync(
+                new UpdatePickupPoint(
+                    Point.Id,
+                    _name,
+                    _addressLine,
+                    _city,
+                    _postcode,
+                    latitude,
+                    longitude,
+                    opens,
+                    closes,
+                    _closed ? PickupPointStatus.Closed : PickupPointStatus.Active,
+                    Point.RowVersion
+                )
+            );
+        _saving = false;
+        if (result.Error is { } error)
+            _error = error.Message;
+        else
+            await OnSaved.InvokeAsync();
+    }
+}

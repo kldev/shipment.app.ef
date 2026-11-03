@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- What the host and the runner agree on (ADR 0007): the outbox messages, the queue and the password reset token.
+       Plain records, no broker or Wolverine types - the host references it without depending on either. -->
+  <ItemGroup>
+    <!-- [UsedImplicitly] on the records made by deserialization only; compile-time attributes, nothing at run time. -->
+    <PackageReference Include="JetBrains.Annotations" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

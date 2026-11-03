@@ -1,0 +1,102 @@
+@* Create or edit a partner in a dialog. A new partner's id is made here (ADR 0009), so a retried save is the same
+   partner. *@
+@inject CrmService Crm
+
+<Modal Title="@(Partner is null ? "New partner" : "Edit partner")" OnClose="OnClose">
+    <form class="space-y-4" @onsubmit="SaveAsync" @onsubmit:preventDefault="true">
+        <ErrorAlert Message="@_error" />
+        <div class="grid gap-4 sm:grid-cols-3">
+            <div class="space-y-2 sm:col-span-2">
+                <label class="label" for="partner-name">Name</label>
+                <input id="partner-name" class="input" @bind="_name" required maxlength="200" />
+            </div>
+            <div class="space-y-2">
+                <label class="label" for="partner-code">Code</label>
+                <input id="partner-code" class="input font-mono uppercase" @bind="_partnerCode" required maxlength="12" placeholder="GBASKET" />
+            </div>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2">
+            <div class="space-y-2">
+                <label class="label" for="partner-kind">Kind</label>
+                <select id="partner-kind" class="input" @bind="_kind">
+                    @foreach (var kind in Labels.PartnerKinds)
+                    {
+                        <option value="@kind.Value">@kind.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="space-y-2">
+                <label class="label" for="partner-commission">Commission (%)</label>
+                <input id="partner-commission" type="number" min="0" max="50" step="0.01" class="input" @bind="_commission" />
+            </div>
+        </div>
+        @if (Partner is not null)
+        {
+            <label class="flex items-center gap-2 text-sm">
+                <input type="checkbox" @bind="_paused" /> Paused - takes no new orders
+            </label>
+        }
+        <div class="flex justify-end gap-2 pt-2">
+            <button type="button" class="btn btn-ghost" @onclick="OnClose">Cancel</button>
+            <button type="submit" class="btn btn-primary" disabled="@_saving">Save</button>
+        </div>
+    </form>
+</Modal>
+
+@code {
+    private readonly Guid _newId = Guid.CreateVersion7();
+    private string _name = "";
+    private string _partnerCode = "";
+    private PartnerKind _kind = PartnerKind.Grocery;
+    private decimal _commission = 15;
+    private bool _paused;
+    private bool _saving;
+    private string? _error;
+
+    /// <summary>The partner to edit; null = a new one.</summary>
+    [Parameter]
+    public PartnerRow? Partner { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    /// <summary>After a save, with the partner's id.</summary>
+    [Parameter]
+    public EventCallback<Guid> OnSaved { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (Partner is null)
+            return;
+        _name = Partner.Name;
+        _partnerCode = Partner.Code;
+        _kind = Partner.Kind;
+        _commission = Partner.CommissionBps / 100m;
+        _paused = Partner.Status == PartnerStatus.Paused;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _error = null;
+        var bps = (int)Math.Round(_commission * 100);
+        var result = Partner is null
+            ? await Crm.CreatePartnerAsync(new CreatePartner(_newId, _partnerCode, _name, _kind, bps))
+            : await Crm.UpdatePartnerAsync(
+                new UpdatePartner(
+                    Partner.Id,
+                    _partnerCode,
+                    _name,
+                    _kind,
+                    bps,
+                    _paused ? PartnerStatus.Paused : PartnerStatus.Active,
+                    Partner.RowVersion
+                )
+            );
+        _saving = false;
+        if (result.Error is { } error)
+            _error = error.Message;
+        else
+            await OnSaved.InvokeAsync(Partner?.Id ?? _newId);
+    }
+}

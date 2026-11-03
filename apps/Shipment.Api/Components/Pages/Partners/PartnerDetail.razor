@@ -1,0 +1,232 @@
+@page "/partners/{Id:guid}"
+@inject CrmService Crm
+@inject CatalogService Catalog
+
+<PageTitle>@(_partner?.Name ?? "Partner") · Shipment</PageTitle>
+
+<a href="partners" class="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+    <Icon Name="arrow-left" /> Back to partners
+</a>
+
+<ErrorAlert Message="@_error" />
+
+@if (_partner is null)
+{
+    @if (_error is null)
+    {
+        <div class="h-40 animate-pulse rounded-xl bg-muted"></div>
+    }
+}
+else
+{
+    <header class="mb-5 flex flex-wrap items-start justify-between gap-4">
+        <div class="flex items-center gap-4">
+            <span class="flex size-12 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+                <Icon Name="@Labels.PartnerIcon(_partner.Kind)" Class="size-6" />
+            </span>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="page-title">@_partner.Name</h1>
+                    <StatusBadge Status="@_partner.Status" />
+                </div>
+                <p class="text-sm text-muted-foreground">
+                    <span class="font-mono">@_partner.Code</span> · @Labels.PartnerKind(_partner.Kind) ·
+                    commission @Labels.Percent(_partner.CommissionBps)
+                </p>
+            </div>
+        </div>
+        <button type="button" class="btn btn-outline" @onclick="() => _editing = true"><Icon Name="pencil" /> Edit partner</button>
+    </header>
+
+    <section class="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <div class="card p-4">
+            <div class="mb-3 flex items-center justify-between">
+                <p class="card-title">Pickup points</p>
+                <button type="button" class="btn btn-ghost btn-sm" @onclick="() => { _pointEditing = null; _pointOpen = true; }">
+                    <Icon Name="plus" /> Add
+                </button>
+            </div>
+            @if (_points is { Count: 0 })
+            {
+                <p class="text-sm text-muted-foreground">No pickup points yet - orders need one.</p>
+            }
+            <ul class="divide-y divide-border">
+                @foreach (var point in _points ?? [])
+                {
+                    <li class="flex items-start justify-between gap-3 py-3">
+                        <div class="min-w-0">
+                            <p class="flex items-center gap-2 font-medium">
+                                <Icon Name="map-pin" Class="size-4 text-primary" /> @point.Name
+                                @if (point.Status == PickupPointStatus.Closed)
+                                {
+                                    <StatusBadge Status="PickupPointStatus.Closed" />
+                                }
+                                else if (point.IsOpenNow)
+                                {
+                                    <span class="badge badge-success">open now</span>
+                                }
+                            </p>
+                            <p class="text-sm text-muted-foreground">@point.AddressLine, @point.Postcode @point.City</p>
+                            <p class="text-xs text-muted-foreground">@Labels.Clock(point.OpensMinute) - @Labels.Clock(point.ClosesMinute)</p>
+                        </div>
+                        <button type="button" class="btn btn-ghost btn-icon" aria-label="Edit @point.Name"
+                                @onclick="() => { _pointEditing = point; _pointOpen = true; }">
+                            <Icon Name="pencil" />
+                        </button>
+                    </li>
+                }
+            </ul>
+        </div>
+        <Map Class="h-80 lg:h-full lg:min-h-80" Label="Pickup points of the partner" Markers="_pointMarkers" />
+    </section>
+
+    <section class="mt-6">
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+                <h2 class="text-lg font-semibold">Catalog</h2>
+                <p class="text-sm text-muted-foreground">
+                    What customers see. "Listed" says it is available - the shelf may disagree; picking finds that out.
+                </p>
+            </div>
+            <button type="button" class="btn btn-primary" @onclick="() => { _productEditing = null; _productOpen = true; }">
+                <Icon Name="plus" /> New product
+            </button>
+        </div>
+        <div class="mb-3 flex flex-wrap items-center gap-2">
+            <label class="relative">
+                <Icon Name="search" Class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                <input type="search" class="input w-64 pl-9" placeholder="Search name or SKU" @bind="_search" @bind:event="oninput" />
+            </label>
+            <select class="input w-auto" @bind="_category">
+                <option value="">All categories</option>
+                @foreach (var category in _categories)
+                {
+                    <option value="@category.Category">@Labels.Category(category.Category) (@category.Listed)</option>
+                }
+            </select>
+            <label class="flex items-center gap-2 text-sm"><input type="checkbox" @bind="_hiddenOnly" /> Hidden only</label>
+            <span class="ml-auto text-sm text-muted-foreground">@VisibleProducts.Count() of @(_products?.Count ?? 0)</span>
+        </div>
+        <div class="card overflow-x-auto">
+            <table class="table">
+                <thead>
+                    <tr><th>Product</th><th>SKU</th><th>Category</th><th class="text-right">Price</th><th class="text-right">Weight</th><th>Size</th><th>Listed</th><th></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var product in VisibleProducts)
+                    {
+                        <tr class="@(product.ListedAvailable ? "" : "opacity-60")">
+                            <td class="font-medium">
+                                @product.Name
+                                @if (product.AgeRestricted)
+                                {
+                                    <span class="badge badge-destructive ml-1">18+</span>
+                                }
+                            </td>
+                            <td class="font-mono text-xs">@product.Sku</td>
+                            <td>@Labels.Category(product.Category)</td>
+                            <td class="text-right tabular-nums">@Labels.Money(product.PriceMinor, product.Currency)</td>
+                            <td class="text-right tabular-nums">@Labels.Weight(product.WeightG)</td>
+                            <td><span class="badge badge-outline">@product.SizeClass</span></td>
+                            <td>
+                                <label class="inline-flex cursor-pointer items-center gap-2">
+                                    <input type="checkbox" checked="@(product.ListedAvailable)" @onchange="() => ToggleListedAsync(product)" />
+                                    <span class="text-xs text-muted-foreground">@(product.ListedAvailable ? "listed" : "hidden")</span>
+                                </label>
+                            </td>
+                            <td class="text-right">
+                                <button type="button" class="btn btn-ghost btn-icon" aria-label="Edit @product.Name"
+                                        @onclick="() => { _productEditing = product; _productOpen = true; }">
+                                    <Icon Name="pencil" />
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+}
+
+@if (_editing && _partner is not null)
+{
+    <PartnerEditor Partner="_partner" OnClose="() => _editing = false" OnSaved="SavedAsync" />
+}
+@if (_pointOpen)
+{
+    <PickupPointEditor PartnerId="Id" Point="_pointEditing" OnClose="() => _pointOpen = false" OnSaved="SavedAsync" />
+}
+@if (_productOpen)
+{
+    <ProductEditor PartnerId="Id" Product="_productEditing" Categories="_categories.Select(c => c.Category).ToList()"
+                   OnClose="() => _productOpen = false" OnSaved="SavedAsync" />
+}
+
+@code {
+    private PartnerRow? _partner;
+    private IReadOnlyList<PickupPointRow>? _points;
+    private IReadOnlyList<MapMarker> _pointMarkers = [];
+    private IReadOnlyList<ProductRow>? _products;
+    private IReadOnlyList<CategoryRow> _categories = [];
+    private string _search = "";
+    private string _category = "";
+    private bool _hiddenOnly;
+    private string? _error;
+    private bool _editing;
+    private bool _pointOpen;
+    private PickupPointRow? _pointEditing;
+    private bool _productOpen;
+    private ProductRow? _productEditing;
+
+    [Parameter]
+    public Guid Id { get; set; }
+
+    private IEnumerable<ProductRow> VisibleProducts =>
+        (_products ?? [])
+            .Where(p => _category == "" || p.Category == _category)
+            .Where(p => !_hiddenOnly || !p.ListedAvailable)
+            .Where(p =>
+                _search == ""
+                || p.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
+                || p.Sku.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            );
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _partner = await Crm.GetPartnerAsync(Id);
+        if (_partner is null)
+        {
+            _error = "Partner not found.";
+            return;
+        }
+        _points = await Crm.ListPickupPointsAsync(Id);
+        _pointMarkers = _points
+            .Select(p => new MapMarker(
+                p.Latitude,
+                p.Longitude,
+                p.Name,
+                p.Status == PickupPointStatus.Closed ? "muted" : "pickup",
+                $"{p.Name}\n{p.AddressLine}\n{Labels.Clock(p.OpensMinute)} - {Labels.Clock(p.ClosesMinute)}"
+            ))
+            .ToList();
+        _products = await Catalog.ListProductsAsync(Id);
+        _categories = await Catalog.ListCategoriesAsync(Id);
+    }
+
+    private async Task SavedAsync()
+    {
+        _editing = _pointOpen = _productOpen = false;
+        await LoadAsync();
+    }
+
+    private async Task ToggleListedAsync(ProductRow product)
+    {
+        _error = null;
+        var result = await Catalog.SetListedAsync(new SetProductListed(product.Id, !product.ListedAvailable, product.RowVersion));
+        _error = result.Error?.Message;
+        _products = await Catalog.ListProductsAsync(Id);
+        _categories = await Catalog.ListCategoriesAsync(Id);
+    }
+}

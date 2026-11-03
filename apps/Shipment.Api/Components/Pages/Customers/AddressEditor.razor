@@ -1,0 +1,132 @@
+@* Create or edit a delivery address; the place is picked by a click on the map (or typed). *@
+@inject CrmService Crm
+
+<Modal Title="@(Address is null ? "New address" : "Edit address")" Wide="true" OnClose="OnClose">
+    <form class="grid gap-5 lg:grid-cols-2" @onsubmit="SaveAsync" @onsubmit:preventDefault="true">
+        <div class="space-y-4">
+            <ErrorAlert Message="@_error" />
+            <div class="space-y-2">
+                <label class="label" for="address-label">Label</label>
+                <input id="address-label" class="input" @bind="_label" required maxlength="40" placeholder="Home" />
+            </div>
+            <div class="space-y-2">
+                <label class="label" for="address-street">Street and number</label>
+                <input id="address-street" class="input" @bind="_addressLine" required maxlength="200" />
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div class="space-y-2">
+                    <label class="label" for="address-postcode">Postcode</label>
+                    <input id="address-postcode" class="input" @bind="_postcode" required maxlength="10" />
+                </div>
+                <div class="space-y-2">
+                    <label class="label" for="address-city">City</label>
+                    <input id="address-city" class="input" @bind="_city" required maxlength="100" />
+                </div>
+            </div>
+            <div class="space-y-2">
+                <label class="label" for="address-notes">Notes for the courier</label>
+                <input id="address-notes" class="input" @bind="_notes" maxlength="500" placeholder="3rd floor, door code 1234" />
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div class="space-y-2">
+                    <label class="label" for="address-lat">Latitude</label>
+                    <input id="address-lat" type="number" step="0.000001" class="input font-mono" @bind="_latitude" />
+                </div>
+                <div class="space-y-2">
+                    <label class="label" for="address-lng">Longitude</label>
+                    <input id="address-lng" type="number" step="0.000001" class="input font-mono" @bind="_longitude" />
+                </div>
+            </div>
+            @if (Address is not { IsDefault: true })
+            {
+                <label class="flex items-center gap-2 text-sm"><input type="checkbox" @bind="_isDefault" /> Default address</label>
+            }
+        </div>
+        <div class="space-y-2">
+            <p class="text-sm text-muted-foreground">Click the map where the courier delivers.</p>
+            <Map Class="h-80 lg:h-full lg:min-h-96" Label="Pick the delivery address" Picking="true"
+                 PickedLatitude="_latitude" PickedLongitude="_longitude" OnPick="Pick" />
+        </div>
+        <div class="flex justify-end gap-2 lg:col-span-2">
+            <button type="button" class="btn btn-ghost" @onclick="OnClose">Cancel</button>
+            <button type="submit" class="btn btn-primary" disabled="@_saving">Save</button>
+        </div>
+    </form>
+</Modal>
+
+@code {
+    private readonly Guid _newId = Guid.CreateVersion7();
+    private string _label = "";
+    private string _addressLine = "";
+    private string _postcode = "";
+    private string _city = "Kraków";
+    private string? _notes;
+    private decimal? _latitude;
+    private decimal? _longitude;
+    private bool _isDefault;
+    private bool _saving;
+    private string? _error;
+
+    [Parameter, EditorRequired]
+    public Guid CustomerId { get; set; }
+
+    [Parameter]
+    public CustomerAddressRow? Address { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    [Parameter]
+    public EventCallback OnSaved { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (Address is null)
+            return;
+        _label = Address.Label;
+        _addressLine = Address.AddressLine;
+        _postcode = Address.Postcode;
+        _city = Address.City;
+        _notes = Address.Notes;
+        _latitude = Address.Latitude;
+        _longitude = Address.Longitude;
+        _isDefault = Address.IsDefault;
+    }
+
+    private void Pick((decimal Latitude, decimal Longitude) place) =>
+        (_latitude, _longitude) = (place.Latitude, place.Longitude);
+
+    private async Task SaveAsync()
+    {
+        _error = null;
+        if (_latitude is not { } latitude || _longitude is not { } longitude)
+        {
+            _error = "Pick the place on the map: latitude -90..90, longitude -180..180.";
+            return;
+        }
+        _saving = true;
+        var result = Address is null
+            ? await Crm.CreateAddressAsync(
+                new CreateCustomerAddress(_newId, CustomerId, _label, _addressLine, _city, _postcode, latitude, longitude, _notes, _isDefault)
+            )
+            : await Crm.UpdateAddressAsync(
+                new UpdateCustomerAddress(
+                    Address.Id,
+                    _label,
+                    _addressLine,
+                    _city,
+                    _postcode,
+                    latitude,
+                    longitude,
+                    _notes,
+                    _isDefault,
+                    Address.RowVersion
+                )
+            );
+        _saving = false;
+        if (result.Error is { } error)
+            _error = error.Message;
+        else
+            await OnSaved.InvokeAsync();
+    }
+}

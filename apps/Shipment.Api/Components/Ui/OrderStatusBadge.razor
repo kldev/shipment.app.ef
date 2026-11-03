@@ -1,0 +1,9 @@
+@* An order's status (Labels.OrderStatuses) as a coloured badge. *@
+<span class="@($"badge {Style}")">@Labels.OrderStatus(Status)</span>
+
+@code {
+    [Parameter]
+    public OrderStatus Status { get; set; }
+
+    private string Style => Labels.OrderStatuses.First(s => s.Value == Status).Badge;
+}

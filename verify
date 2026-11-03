@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Proof commands (as Tech Lead Wiki's verify): ./verify <group> | ./verify all
+#   domain    the rules without a database (time zone, clearance, fees, payout, tip, steps) (trait verify=domain)
+#   schema    the EF model against the migrations, roles and grants  (trait verify=schema)
+#   platform  sign-in, me, users                                       (trait verify=platform)
+#   crm       partners, pickup points, customers and their addresses  (trait verify=crm)
+#   catalog   products, prices, sizes, listed availability            (trait verify=catalog)
+#   carriers  couriers, vehicles, shifts, positions                   (trait verify=carriers)
+#   compliance  courier documents, clearance, the age check           (trait verify=compliance)
+#   ordering  orders, delivery fee, picking with missing stock, events  (trait verify=ordering)
+#   dispatch  shipments, required vehicle, proposals, assignment, lifecycle (trait verify=dispatch)
+#   tracking  routes, the approximate fallback, ETA, the simulator      (trait verify=tracking)
+#   billing   ledger: authorization, capture, refunds, commission, payouts (trait verify=billing)
+#   web       public and protected pages and assets, Scalar, OpenAPI,
+#             logout, cross-site writes, API 404s                      (trait verify=web)
+#   all       everything above
+# Tests need Docker (Testcontainers: PostgreSQL 18, the schema from the EF Core migrations through Shipment.DbMigrator).
+# One heavy process at a time (16 GB laptop): build with -m:2, workstation GC.
+set -euo pipefail
+cd "$(dirname "$0")"
+
+groups=(domain schema platform crm catalog carriers compliance ordering dispatch tracking billing web)
+
+usage() {
+  echo "usage: ./verify <$(IFS='|'; echo "${groups[*]}")|all>" >&2
+  exit 2
+}
+
+[[ $# -eq 1 ]] || usage
+name="$1"
+[[ "$name" == "all" || " ${groups[*]} " == *" $name "* ]] || {
+  echo "unknown group '$name'" >&2
+  usage
+}
+
+if ! docker info >/dev/null 2>&1; then
+  echo "Docker is not running - the tests start PostgreSQL in a container (Testcontainers)." >&2
+  exit 1
+fi
+
+filter=()
+[[ "$name" == "all" ]] || filter=(--filter-trait "verify=$name")
+
+dotnet build tests/Shipment.Tests -m:2 --nologo -v q
+dotnet build-server shutdown >/dev/null 2>&1 || true
+# Exit code 8 of the test platform = no test matched: a group without tests is a failure, not a pass.
+DOTNET_gcServer=0 dotnet test --project tests/Shipment.Tests --no-build -- "${filter[@]}"

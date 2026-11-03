@@ -1,0 +1,78 @@
+@* Records or renews a courier's document; a renewed one needs verifying again. *@
+@inject ComplianceService Compliance
+
+<Modal Title="@($"Document of {CourierName}")" OnClose="OnClose">
+    <form class="space-y-4" @onsubmit="SaveAsync" @onsubmit:preventDefault="true">
+        <ErrorAlert Message="@_error" />
+        <div class="space-y-2">
+            <label class="label" for="document-kind">Document</label>
+            <select id="document-kind" class="input" @bind="_kind">
+                @foreach (var kind in Labels.DocumentKinds)
+                {
+                    <option value="@kind.Value">@kind.Name</option>
+                }
+            </select>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2">
+            <div class="space-y-2">
+                <label class="label" for="document-number">Number</label>
+                <input id="document-number" class="input font-mono uppercase" @bind="_number" required maxlength="50" />
+            </div>
+            <div class="space-y-2">
+                <label class="label" for="document-valid">Valid until</label>
+                <input id="document-valid" type="date" class="input" @bind="_validUntil" />
+            </div>
+        </div>
+        <p class="text-xs text-muted-foreground">A document of the same kind is replaced; it counts once verified.</p>
+        <div class="flex justify-end gap-2 pt-2">
+            <button type="button" class="btn btn-ghost" @onclick="OnClose">Cancel</button>
+            <button type="submit" class="btn btn-primary" disabled="@_saving">Save</button>
+        </div>
+    </form>
+</Modal>
+
+@code {
+    private readonly Guid _newId = Guid.CreateVersion7();
+    private DocumentKind _kind = DocumentKind.IdCard;
+    private string _number = "";
+    private DateOnly _validUntil = DateOnly.FromDateTime(DateTime.Today.AddYears(1));
+    private bool _saving;
+    private string? _error;
+
+    [Parameter, EditorRequired]
+    public Guid CourierId { get; set; }
+
+    [Parameter]
+    public string? CourierName { get; set; }
+
+    /// <summary>The document to renew; null = pick the kind.</summary>
+    [Parameter]
+    public DocumentRow? Document { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    [Parameter]
+    public EventCallback OnSaved { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (Document is null)
+            return;
+        _kind = Document.Kind;
+        _number = Document.Number;
+        _validUntil = Document.ValidUntil;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _error = null;
+        var result = await Compliance.SetDocumentAsync(new SetDocument(_newId, CourierId, _kind, _number, _validUntil));
+        _saving = false;
+        if (result.Error is { } error)
+            _error = error.Message;
+        else
+            await OnSaved.InvokeAsync();
+    }
+}

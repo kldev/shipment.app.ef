@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- Shared e-mail library (libs/README.md): MailKit for SMTP, Liquid templates (Fluid) embedded here. The
+         templates and their model are Shipment's own: the customer's order e-mails (spec 007), in English. -->
+    <ItemGroup>
+      <EmbeddedResource Include="Templates\*.liquid" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Fluid.Core" />
+      <PackageReference Include="MailKit" />
+      <PackageReference Include="Microsoft.Extensions.Configuration" />
+      <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
+      <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" />
+      <PackageReference Include="Microsoft.Extensions.Logging" />
+      <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+      <PackageReference Include="Microsoft.Extensions.Options" />
+      <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+      <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" />
+      <PackageReference Include="MimeKit" />
+    </ItemGroup>
+</Project>

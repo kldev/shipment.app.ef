@@ -1,0 +1,9 @@
+@* A shipment's status (Labels.ShipmentStatuses) as a coloured badge. *@
+<span class="@($"badge {Style}")">@Labels.ShipmentStatus(Status)</span>
+
+@code {
+    [Parameter]
+    public ShipmentStatus Status { get; set; }
+
+    private string Style => Labels.ShipmentStatuses.First(s => s.Value == Status).Badge;
+}

@@ -1,0 +1,179 @@
+@* The "Current location" card of a shipment (tracking's own view - ADR 0010): both legs on the map, the path already
+   driven, the courier, and the location details - last update, next stop, distance and time left, ETA against the
+   promised time. Refreshed by a timer while the shipment is on its way (no push from the database); the simulator
+   switch moves the demo's courier. *@
+@implements IAsyncDisposable
+@inject TrackingService Tracking
+
+<div class="card p-4 text-sm md:col-span-2 xl:col-span-3">
+    <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <p class="card-title flex items-center gap-2"><Icon Name="map" Class="size-4 text-muted-foreground" /> Current location</p>
+        @if (_tracking is not null && Moving)
+        {
+            <button type="button" class="@($"btn btn-sm {(_tracking.Simulated ? "btn-secondary" : "btn-outline")}")" disabled="@_saving"
+                    @onclick="ToggleSimulationAsync">
+                <Icon Name="@(_tracking.Simulated ? "circle-dot" : "navigation")" />
+                @(_tracking.Simulated ? "Simulating - stop" : "Simulate the courier")
+            </button>
+        }
+    </div>
+    <ErrorAlert Message="@_error" />
+    @if (_tracking is null)
+    {
+        <p class="text-muted-foreground">
+            @(Status == ShipmentStatus.Available ? "The route appears once a courier is assigned." : "The runner is fetching the route...")
+        </p>
+    }
+    else
+    {
+        <div class="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
+            <Map Class="h-96" Label="Route of the shipment and the courier" Markers="_markers" Lines="_lines" />
+            <dl class="space-y-3">
+                <div>
+                    <dt class="text-xs text-muted-foreground">Last update</dt>
+                    <dd class="font-medium">@(_tracking.PositionAt is null ? "–" : Labels.Ago(_tracking.PositionAt))</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted-foreground">Next stop</dt>
+                    <dd class="font-medium">
+                        @(_tracking.NextStop switch
+                        {
+                            NextStop.Pickup => $"{_tracking.PartnerName}, {_tracking.PickupPointName}",
+                            NextStop.Customer => $"{_tracking.CustomerName}, {_tracking.DropoffAddressLine}",
+                            _ => "–",
+                        })
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted-foreground">Distance left</dt>
+                    <dd class="font-medium tabular-nums">@Labels.Distance(_tracking.RemainingM)</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted-foreground">ETA · promised</dt>
+                    <dd class="font-medium tabular-nums">
+                        @(_tracking.EtaAt is null ? "–" : Labels.Time(_tracking.EtaAt)) · @Labels.Time(_tracking.PromisedAt)
+                        @if (_tracking.Late)
+                        {
+                            <span class="badge badge-destructive ml-1">late</span>
+                        }
+                        else if (_tracking.EtaAt is not null)
+                        {
+                            <span class="badge badge-success ml-1">on time</span>
+                        }
+                    </dd>
+                </div>
+                @if (_tracking.Approximate)
+                {
+                    <p class="flex items-start gap-1.5 text-xs text-warning">
+                        <Icon Name="triangle-alert" Class="mt-0.5 size-3.5 shrink-0" /> The router did not answer: straight lines at the vehicle's speed.
+                    </p>
+                }
+                <p class="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                    <span class="inline-flex items-center gap-1"><span class="h-0.5 w-4 bg-chart-1"></span> ahead</span>
+                    <span class="inline-flex items-center gap-1"><span class="h-1 w-4 bg-success"></span> driven</span>
+                </p>
+            </dl>
+        </div>
+    }
+</div>
+
+@code {
+    private static readonly TimeSpan RefreshEvery = TimeSpan.FromSeconds(3);
+
+    private readonly CancellationTokenSource _stop = new();
+    private TrackingRow? _tracking;
+    private IReadOnlyList<MapMarker> _markers = [];
+    private IReadOnlyList<MapLine> _lines = [];
+    private string? _error;
+    private bool _saving;
+    private Task? _timer;
+
+    [Parameter, EditorRequired]
+    public Guid ShipmentId { get; set; }
+
+    /// <summary>The shipment's status from the page: a new one reloads the card.</summary>
+    [Parameter]
+    public ShipmentStatus Status { get; set; }
+
+    private bool Moving =>
+        Status is ShipmentStatus.CourierAssigned
+            or ShipmentStatus.ArrivedAtPickup
+            or ShipmentStatus.PickedUp
+            or ShipmentStatus.ArrivedAtCustomer;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+        _timer ??= RefreshAsync(_stop.Token);
+    }
+
+    private async Task RefreshAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(RefreshEvery);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct))
+                if (Moving || _tracking is null)
+                    await InvokeAsync(async () =>
+                    {
+                        await LoadAsync();
+                        StateHasChanged();
+                    });
+        }
+        catch (OperationCanceledException)
+        {
+            // The page is gone.
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _tracking = (await Tracking.ListTrackingAsync(ShipmentId)).FirstOrDefault();
+            if (_tracking is null)
+                return;
+            var pings = await Tracking.ListPingsAsync(ShipmentId);
+            var ahead = _tracking.Approximate ? "approximate" : "route";
+            _lines =
+            [
+                new MapLine(GeoJson.Points(_tracking.ToPickup), ahead),
+                new MapLine(GeoJson.Points(_tracking.ToCustomer), ahead),
+                new MapLine(pings.Select(p => ((double)p.Latitude, (double)p.Longitude)).ToList(), "driven"),
+            ];
+            _markers =
+            [
+                new(_tracking.PickupLatitude, _tracking.PickupLongitude, $"{_tracking.PartnerName} - {_tracking.PickupPointName}"),
+                new(_tracking.DropoffLatitude, _tracking.DropoffLongitude, _tracking.CustomerName, "customer"),
+                .. _tracking is { Latitude: { } lat, Longitude: { } lon } && Moving
+                    ? new[]
+                    {
+                        new MapMarker(lat, lon, _tracking.CourierName ?? "Courier", "courier", $"{_tracking.CourierName}\n{Labels.Ago(_tracking.PositionAt)}"),
+                    }
+                    : [],
+            ];
+            _error = null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _error = "The location could not be loaded. Try again.";
+        }
+    }
+
+    private async Task ToggleSimulationAsync()
+    {
+        _saving = true;
+        var result = await Tracking.SetSimulationAsync(new SetSimulation(ShipmentId, _tracking is not { Simulated: true }));
+        _error = result.Error?.Message;
+        _saving = false;
+        await LoadAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _stop.CancelAsync();
+        if (_timer is not null)
+            await _timer;
+        _stop.Dispose();
+    }
+}

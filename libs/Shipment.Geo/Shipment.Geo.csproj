@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Geometry of routes on the map (no PostGIS - docs/domain.md, "Map"): GeoJSON LineStrings, distances on the sphere,
+       a point a given distance along a line. Pure functions: the runner's simulator and the tests use them. -->
+</Project>

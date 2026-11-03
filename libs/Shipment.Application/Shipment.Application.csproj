@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The use cases of Shipment (ADR 0013): one service per bounded context - its commands (writes through the domain,
+       one SaveChanges with the outbox messages) and its queries (projections to rows). The host's endpoints and pages,
+       and the runner's handlers, are thin adapters over these services. No HttpContext, no ClaimsPrincipal here. -->
+  <ItemGroup>
+    <PackageReference Include="JetBrains.Annotations" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Extensions.Identity.Core" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Shipment.Domain/Shipment.Domain.csproj" />
+    <ProjectReference Include="../Shipment.Messaging.Contracts/Shipment.Messaging.Contracts.csproj" />
+    <ProjectReference Include="../Shipment.Persistence/Shipment.Persistence.csproj" />
+  </ItemGroup>
+</Project>

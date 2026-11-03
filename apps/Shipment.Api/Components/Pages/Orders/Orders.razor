@@ -1,0 +1,95 @@
+@page "/orders"
+@inject OrderingService Ordering
+@inject NavigationManager Navigation
+
+<PageTitle>Orders · Shipment</PageTitle>
+
+<PageHeader Eyebrow="Operations" Title="Orders"
+            Description="Orders placed for customers. Prices and the address are copied at placing; the store packs them in Picking.">
+    <Actions>
+        <button type="button" class="btn btn-primary" @onclick="() => _wizardOpen = true"><Icon Name="plus" /> New order</button>
+    </Actions>
+</PageHeader>
+
+
+<div class="mb-4 flex flex-wrap items-center gap-2">
+    <button type="button" class="@($"btn btn-sm {(_status is null ? "btn-secondary" : "btn-ghost")}")" @onclick="() => _status = null">
+        All <span class="text-muted-foreground tabular-nums">@_orders.Count</span>
+    </button>
+    @foreach (var (value, name, _) in Labels.OrderStatuses)
+    {
+        <button type="button" class="@($"btn btn-sm {(_status == value ? "btn-secondary" : "btn-ghost")}")" @onclick="() => _status = value">
+            @name <span class="text-muted-foreground tabular-nums">@_orders.Count(o => o.Status == value)</span>
+        </button>
+    }
+</div>
+
+@if (_loaded && !Visible.Any())
+{
+    <EmptyState IconName="shopping-cart" Title="No orders here"
+                Description="Place one with New order: a customer, one partner's products, a pickup point and the fee by distance." />
+}
+else
+{
+    <div class="card overflow-x-auto">
+        <table class="table">
+            <thead>
+                <tr><th>Order</th><th>Customer</th><th>From</th><th class="text-right">Items</th><th class="text-right">Total</th><th>Status</th><th>Placed</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var order in Visible)
+                {
+                    <tr class="cursor-pointer hover:bg-muted/50" @onclick="@(() => Navigation.NavigateTo($"orders/{order.Id}"))">
+                        <td><a href="@($"orders/{order.Id}")" class="font-mono font-medium hover:underline">@order.Code</a></td>
+                        <td>
+                            <p class="font-medium">@order.CustomerName</p>
+                            <p class="text-xs text-muted-foreground">@order.AddressLine</p>
+                        </td>
+                        <td>
+                            <p>@order.PartnerName</p>
+                            <p class="text-xs text-muted-foreground">@order.PickupPointName · @Labels.Distance(order.DistanceM)</p>
+                        </td>
+                        <td class="text-right tabular-nums">
+                            @order.ItemCount
+                            @if (order.MissingLines > 0)
+                            {
+                                <span class="badge badge-warning ml-1" title="Lines missing at picking">@order.MissingLines missing</span>
+                            }
+                        </td>
+                        <td class="text-right font-medium tabular-nums">@Labels.Money(order.TotalMinor, order.Currency)</td>
+                        <td>
+                            <OrderStatusBadge Status="@order.Status" />
+                            @if (order.AgeRestricted)
+                            {
+                                <span class="badge badge-outline ml-1" title="Contains 18+ products: the courier checks the ID">18+</span>
+                            }
+                        </td>
+                        <td class="text-xs whitespace-nowrap text-muted-foreground" title="@Labels.DateTime(order.PlacedAt)">@Labels.Ago(order.PlacedAt)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@if (_wizardOpen)
+{
+    <OrderWizard OnClose="() => _wizardOpen = false" OnPlaced="Placed" />
+}
+
+@code {
+    private IReadOnlyList<OrderRow> _orders = [];
+    private OrderStatus? _status;
+    private bool _loaded;
+    private bool _wizardOpen;
+
+    private IEnumerable<OrderRow> Visible => _orders.Where(o => _status is null || o.Status == _status);
+
+    private void Placed(Guid id) => Navigation.NavigateTo($"orders/{id}");
+
+    protected override async Task OnInitializedAsync()
+    {
+        _orders = await Ordering.ListOrdersAsync(take: 200);
+        _loaded = true;
+    }
+}

@@ -1,0 +1,23 @@
+@* A courier's shift: available, busy (delivering) or off shift. *@
+<span class="@($"badge {Style}")">@Text</span>
+
+@code {
+    [Parameter]
+    public ShiftStatus Status { get; set; }
+
+    private string Style =>
+        Status switch
+        {
+            ShiftStatus.Available => "badge-success",
+            ShiftStatus.Busy => "badge-primary",
+            _ => "badge-secondary",
+        };
+
+    private string Text =>
+        Status switch
+        {
+            ShiftStatus.Available => "available",
+            ShiftStatus.Busy => "delivering",
+            _ => "off shift",
+        };
+}

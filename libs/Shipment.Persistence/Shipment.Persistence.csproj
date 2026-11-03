@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- EF Core on PostgreSQL (ADR 0013): the DbContext, the mapping of the domain to the modules' schemas (crm, catalog,
+       carriers, compliance, ordering, dispatch, tracking, billing, messaging, identity), the migrations and the save
+       helpers. The schema comes from these migrations only. -->
+  <ItemGroup>
+    <PackageReference Include="EFCore.NamingConventions" />
+    <PackageReference Include="JetBrains.Annotations" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Shipment.Domain/Shipment.Domain.csproj" />
+  </ItemGroup>
+</Project>

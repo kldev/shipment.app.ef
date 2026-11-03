@@ -1,0 +1,77 @@
+@page "/partners"
+@inject CrmService Crm
+@inject NavigationManager Navigation
+
+<PageTitle>Partners · Shipment</PageTitle>
+
+<PageHeader Eyebrow="Network" Title="Partners"
+            Description="Stores and restaurants that hand orders over at their pickup points.">
+    <Actions>
+        <button type="button" class="btn btn-primary" @onclick="() => _creating = true">
+            <Icon Name="plus" /> New partner
+        </button>
+    </Actions>
+</PageHeader>
+
+
+<div class="mb-4 flex flex-wrap items-center gap-2">
+    <button type="button" class="@($"btn btn-sm {(_kind is null ? "btn-secondary" : "btn-ghost")}")" @onclick="() => _kind = null">All</button>
+    @foreach (var kind in Labels.PartnerKinds)
+    {
+        <button type="button" class="@($"btn btn-sm {(_kind == kind.Value ? "btn-secondary" : "btn-ghost")}")" @onclick="() => _kind = kind.Value">
+            <Icon Name="@kind.Icon" /> @kind.Name
+        </button>
+    }
+</div>
+
+@if (_partners is null)
+{
+    <div class="h-40 animate-pulse rounded-xl bg-muted"></div>
+}
+else if (_partners is { Count: 0 })
+{
+    <EmptyState IconName="store" Title="No partners yet" Description="Add the first store or restaurant." />
+}
+else if (_partners is not null)
+{
+    <div class="card overflow-x-auto">
+        <table class="table">
+            <thead>
+                <tr><th>Partner</th><th>Code</th><th>Kind</th><th class="text-right">Commission</th><th class="text-right">Pickup points</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var partner in _partners.Where(p => _kind is null || p.Kind == _kind))
+                {
+                    <tr class="cursor-pointer" @onclick="@(() => Navigation.NavigateTo($"partners/{partner.Id}"))">
+                        <td>
+                            <a href="@($"partners/{partner.Id}")" class="flex items-center gap-3 font-medium hover:underline">
+                                <span class="flex size-8 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+                                    <Icon Name="@Labels.PartnerIcon(partner.Kind)" />
+                                </span>
+                                @partner.Name
+                            </a>
+                        </td>
+                        <td class="font-mono text-xs">@partner.Code</td>
+                        <td>@Labels.PartnerKind(partner.Kind)</td>
+                        <td class="text-right tabular-nums">@Labels.Percent(partner.CommissionBps)</td>
+                        <td class="text-right tabular-nums">@partner.ActivePickupPoints</td>
+                        <td><StatusBadge Status="@partner.Status" /></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@if (_creating)
+{
+    <PartnerEditor OnClose="() => _creating = false" OnSaved="@(id => Navigation.NavigateTo($"partners/{id}"))" />
+}
+
+@code {
+    private IReadOnlyList<PartnerRow>? _partners;
+    private PartnerKind? _kind;
+    private bool _creating;
+
+    protected override async Task OnInitializedAsync() => _partners = await Crm.ListPartnersAsync();
+}

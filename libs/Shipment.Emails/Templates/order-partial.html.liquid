@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+   <meta charset="utf-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1">
+   <title>Some items were not on the shelf</title>
+   <style>
+      * { font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+      @media only screen and (max-width: 620px) { .content-padding { padding-left: 20px !important; padding-right: 20px !important; } }
+   </style>
+</head>
+<body style="margin: 0; padding: 0; width: 100%; background-color: #f6f7f9; color: #17202a;">
+<div style="display: none; max-height: 0; overflow: hidden;">Some items of {{ OrderCode }} were not available - refund {{ Refund }}.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse; width: 100%; background-color: #f6f7f9;">
+   <tr>
+      <td align="center" style="padding: 32px 12px;">
+         <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
+                style="border-collapse: collapse; width: 100%; max-width: 600px; background-color: #ffffff; border: 1px solid #dfe3e8; border-radius: 4px;">
+            {% include 'header' %}
+            <tr>
+               <td class="content-padding" style="padding: 32px 32px 0 32px;">
+                  <div style="font-size: 11px; font-weight: 600; color: #1e4f8f; letter-spacing: 1.4px; text-transform: uppercase;">Order packed</div>
+                  <h1 style="margin: 10px 0 0 0; font-size: 22px; line-height: 30px; font-weight: 600; color: #17202a;">Some items were not on the shelf</h1>
+                  <p style="margin: 12px 0 0 0; font-size: 14px; line-height: 22px; color: #5f6b78;">The store packed your order <strong style="color: #17202a;">{{ OrderCode }}</strong>, but not everything was there. This is what the courier brings:</p>
+               </td>
+            </tr>
+{% include 'lines' %}
+<tr>
+   <td class="content-padding" style="padding: 20px 32px 0 32px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+             style="border-collapse: collapse; width: 100%; background-color: #fff5df; border: 1px solid #f2e2bd; border-radius: 4px;">
+         <tr><td style="padding: 12px 16px; font-size: 13px; line-height: 20px; color: #a56800;">
+            <strong>Not available:</strong>
+            {% for line in MissingLines %}<br>{{ line.Quantity }} &times; {{ line.Name }} - {{ line.Amount }}{% endfor %}
+            <br><strong>Refund: {{ Refund }}</strong> - back to your payment method; you are not charged for these items.
+         </td></tr>
+      </table>
+   </td>
+</tr>
+            <tr><td style="padding: 28px 0 0 0;"></td></tr>
+            {% include 'footer' %}
+         </table>
+      </td>
+   </tr>
+</table>
+</body>
+</html>

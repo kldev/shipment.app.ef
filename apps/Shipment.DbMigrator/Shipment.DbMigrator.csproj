@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The database's deployment (ADR 0013): the superuser's part (the migrator's role and the database, then LOGIN for
+       the processes' roles and the accounts' password), the EF Core migrations of libs/Shipment.Persistence as the
+       migrator, and the Kraków demo data. Run by deploy/deploy.sh and by the tests, the same code in both. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <!-- PasswordHasher: the accounts' password in the same format the host's sign-in checks (ADR 0011). -->
+    <PackageReference Include="Microsoft.Extensions.Identity.Core" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../libs/Shipment.Persistence/Shipment.Persistence.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The demo data of Kraków: fictitious partners, customers, catalogs, couriers and their documents. -->
+    <EmbeddedResource Include="Seed/*.sql" LogicalName="Seed/%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>
