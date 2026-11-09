@@ -4,8 +4,8 @@ Status: accepted (2026-10-29)
 
 ## Context
 
-Shipment is a learning project. It will not run in production in 2026. The laptop has 16 GB of RAM and already runs
-a shared Docker Swarm stack `hr-local` (PostgreSQL 18, RabbitMQ, RustFS, MailPit) used by several projects.
+Shipment is a learning project. It will not run in production in 2026. The developer's machine already runs a shared
+Docker Swarm stack `hr-local` (PostgreSQL 18, RabbitMQ, RustFS, MailPit) used by several projects.
 
 ## Decision
 

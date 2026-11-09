@@ -15,7 +15,7 @@
 #             logout, cross-site writes, API 404s                      (trait verify=web)
 #   all       everything above
 # Tests need Docker (Testcontainers: PostgreSQL 18, the schema from the EF Core migrations through Shipment.DbMigrator).
-# One heavy process at a time (16 GB laptop): build with -m:2, workstation GC.
+# Machines have 32 GB: the default build and test settings, no throttling.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -41,7 +41,6 @@ fi
 filter=()
 [[ "$name" == "all" ]] || filter=(--filter-trait "verify=$name")
 
-dotnet build tests/Shipment.Tests -m:2 --nologo -v q
-dotnet build-server shutdown >/dev/null 2>&1 || true
+dotnet build tests/Shipment.Tests --nologo -v q
 # Exit code 8 of the test platform = no test matched: a group without tests is a failure, not a pass.
-DOTNET_gcServer=0 dotnet test --project tests/Shipment.Tests --no-build -- "${filter[@]}"
+dotnet test --project tests/Shipment.Tests --no-build -- "${filter[@]}"

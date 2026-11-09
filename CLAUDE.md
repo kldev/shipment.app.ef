@@ -24,9 +24,9 @@ dotnet csharpier check .              # formatting (pre-commit)
 ```
 
 Tests: xUnit v3 on Microsoft.Testing.Platform, Testcontainers (PostgreSQL 18; the schema from the migrations through
-`Shipment.DbMigrator`, as in deploy.sh). The laptop has 16 GB: build once with `-m:2`, then `dotnet build-server
-shutdown`, run only the touched group (`./verify <module>` or `-- --filter-class Shipment.Tests.<Class>`),
-`DOTNET_gcServer=0`; never the whole suite.
+`Shipment.DbMigrator`, as in deploy.sh). While working, run the touched group (`./verify <module>` or
+`-- --filter-class Shipment.Tests.<Class>`); before a commit or PR, `./verify all`. The machines have 32 GB: default
+build and test settings.
 
 ## Architecture (ADR 0013)
 

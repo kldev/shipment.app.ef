@@ -28,8 +28,7 @@
         "Shipment.slnx",
         "--nologo",
         "-v",
-        "q",
-        "-m:2"
+        "q"
       ]
     }
   ]

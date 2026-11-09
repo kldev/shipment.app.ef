@@ -34,7 +34,7 @@ superuser_password=$(docker exec "$pg_task" printenv POSTGRES_PASSWORD)
 export ConnectionStrings__postgres="Host=localhost;Port=5432;Database=postgres;Username=$superuser;Password=$superuser_password"
 export Database__Name="$DB" Database__Migrator="$MIGRATOR" Database__MigratorPassword="$MIGRATOR_PASSWORD"
 export Logins__${API_ROLE}="$API_PASSWORD" Logins__${RUNNER_ROLE}="$RUNNER_PASSWORD"
-dotnet build -v q -m:2 --nologo "$REPO_DIR/apps/Shipment.DbMigrator" >/dev/null
+dotnet build -v q --nologo "$REPO_DIR/apps/Shipment.DbMigrator" >/dev/null
 migrator() { dotnet "$REPO_DIR/apps/Shipment.DbMigrator/bin/Debug/net10.0/Shipment.DbMigrator.dll" "$@"; }
 migrator prepare
 
@@ -56,7 +56,7 @@ fi
 mq set_permissions -p "$VHOST" "$MQ_USER" '.*' '.*' '.*' >/dev/null
 echo "RabbitMQ: vhost $VHOST, user $MQ_USER."
 
-echo "Building $IMAGE (one build at a time - the laptop has 16 GB)..."
+echo "Building $IMAGE..."
 docker build -q -t "$IMAGE" -f "$REPO_DIR/Dockerfile" "$REPO_DIR" >/dev/null
 docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
 # Secrets go in as `-e NAME` (the value from this process's environment), never as an argument on the command line.

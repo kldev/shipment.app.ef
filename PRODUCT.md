@@ -45,7 +45,7 @@ Not yet:
 |---|---|---|---|
 | D1 | Logic in C# on EF Core, a hand-written REST API (ADR 0013) | a standard .NET project | - |
 | D2 | One host: REST API + Blazor on the same services (ADR 0002) | one deployment, no CORS | - |
-| D3 | Local only, on `hr-local` (ADR 0003) | learning project, 16 GB laptop | shown outside the laptop |
+| D3 | Local only, on `hr-local` (ADR 0003) | learning project, shared infrastructure | shown outside the laptop |
 | D4 | One operator, no tenants (ADR 0004) | one city's operator | a second operator |
 | D5 | Ambit's look on Tailwind (ADR 0005) | the author's product family | - |
 | D6 | Username sign-in, admins only, e-mail for notifications (ADR 0006) | the admin plays every role in the demo | couriers or partners sign in |
