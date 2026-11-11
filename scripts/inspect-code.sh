@@ -32,7 +32,7 @@ excluded+=";libs/Shipment.RabbitMq.Management/**;libs/Shipment.Emails/**"
 jb inspectcode Shipment.slnx --no-build --format=Text --severity=SUGGESTION --exclude="$excluded" \
   --output="$report" >/dev/null
 
-issues="$(grep -cE '\.(cs|razor):[0-9]+ ' "$report" || true)"
+issues="$(grep -cE '\.(cs|razor)(:[0-9]+ |: )' "$report" || true)"
 if (( issues > 0 )); then
   cat "$report"
   echo

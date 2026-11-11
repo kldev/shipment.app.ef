@@ -1,4 +1,3 @@
-using Shipment.Domain.Common;
 using Shipment.Domain.Ordering;
 
 namespace Shipment.Application.Ordering;
